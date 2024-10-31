@@ -6,7 +6,7 @@
 
 At WebGrip, we believe in the power of open-source software and community collaboration. We aim to create high-quality projects that are accessible, efficient, and easy to use.
 
-## Our coolestProjects
+## Our Coolest Projects
 
 - [**Traefik Local Development**](https://github.com/webgrip/traefik-local-development): A way to be able to host your docker-compose projects easily with your own TLDs and secured with SSL.
 
