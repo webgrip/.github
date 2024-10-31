@@ -39,4 +39,4 @@ Most of our projects are licensed under the [MIT License](https://github.com/web
 
 ---
 
-*Thank you looking at my code! We look forward to your contributions and collaboration.*
+*Thank you looking at my code! Please let me know if you like anything :)*
