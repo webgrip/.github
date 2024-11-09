@@ -1,0 +1,74 @@
+C4Context
+    title Platform Engineering Components
+    Enterprise_Boundary(c0, "Organization") {
+
+        Boundary(cPeople, "People") {
+            Person(developer, "Developer", "Builds and maintains applications")
+            Person(platformEngineer, "Platform Engineer", "Designs and manages the platform")
+        }
+
+        Boundary(cFrontEnd, "Frontend") {
+            Boundary(c1, "Developer Control Plane", "Frontend") {
+                Boundary(c7, "Tooling") {
+                    System(ide, "IDE", "PHPStorm, VSCode, etc.")
+                    System(dbc, "Database Client", "Datagrid, MySQL Workbench, etc.")
+                }
+
+                Boundary(cVersionControl, "Version Control") {
+                    Boundary(cAppCode, "Application Code", "Source code for applications") {
+                        System(appSource, "Application Source", "Source code for applications")
+                        System(workflowSource, "Workflow Source", "Source code for workflows")
+                    }
+                }
+
+                Boundary(cServiceCatalog, "Service Catalog") {
+                    System(idp, "Internal Developer Platform", "Provides self-service capabilities for and serves as a single point of entry to the platform")
+                }
+            }
+        }
+
+        Boundary(cBackEnd, "Backend") {
+            Boundary(c2, "Integration Delivery Plane", "Backend") {
+                Boundary(cCiCd, "CI/CD Pipeline", "Github Actions") {
+                    System(ci, "CI Pipelines", "GitHub Actions")
+                    System(cd, "CD Pipelines", "GitHub Actions")
+                }
+
+                Boundary(cRegistry, "Registry") {
+                    System(packageRegistry, "Package Registry", "Packagist, npm, etc.")
+                    System(containerRegistry, "Container Registry", "Docker, etc.")
+                    System(artifactRegistry, "Artifact Registry", "Artifactory, etc.")
+                }
+            }
+
+            Boundary(c3, "Monitoring and Logging Plane") {
+                Boundary(cObservability, "Observability") {
+                    System(grafana, "Grafana", "Logs/Traces/Metrics visualization")
+                    System(collector, "Collector", "Collects logs, traces, and metrics")
+                }
+
+                Boundary(cMonitoring, "Monitoring") {
+                    System(monitoring, "Monitoring Tools", "Tracks system performance and health")
+                }
+            }
+
+            Boundary(cSecurity, "Security Plane") {
+                System(secretManagement, "Secret Management Services", "Manages secrets and credentials")
+            }
+
+            Boundary(cResourcePlane, "Resource Plane", "savvii") {
+                System(servers, "Servers", "Physical or virtual machines")
+                System(networking, "Networking", "Connects servers and services")
+                System(loadBalancers, "Load Balancers", "Distributes incoming network traffic")
+            }
+        }
+    }
+
+    Rel(developer, ide, "Uses")
+    Rel(developer, dbc, "Uses")
+    Rel(developer, idp, "Uses")
+    Rel(ide, appSource, "Pushes code to")
+    Rel(ide, workflowSource, "test")
+
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="2")
+
