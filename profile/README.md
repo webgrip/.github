@@ -1,5 +1,3 @@
-# Welcome to WebGrip
-
 <p align="center">
 	<a href="https://webgrip.org"><img src="https://img.shields.io/badge/Website-webgrip.nl-0A6484?style=for-the-badge&logo=firefox-browser&logoColor=white" alt="Website" /></a>
 	<a href="https://twitter.com/webgrip"><img src="https://img.shields.io/badge/Follow-@webgrip-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" alt="Twitter" /></a>
