@@ -1,5 +1,5 @@
 <p align="center">
-	<a href="https://webgrip.org"><img src="https://img.shields.io/badge/Website-webgrip.nl-0A6484?style=for-the-badge&logo=firefox-browser&logoColor=white" alt="Website" /></a>
+	<a href="https://webgrip.nl"><img src="https://img.shields.io/badge/Website-webgrip.nl-0A6484?style=for-the-badge&logo=firefox-browser&logoColor=white" alt="Website" /></a>
 	<a href="https://twitter.com/webgrip"><img src="https://img.shields.io/badge/Follow-@webgrip-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" alt="Twitter" /></a>
 	<a href="https://github.com/webgrip/traefik-local-development/stargazers"><img src="https://img.shields.io/github/stars/webgrip?style=for-the-badge&color=yellow" alt="Stars" /></a>
 	<a href="https://github.com/webgrip/.github/blob/main/LICENCE"><img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License" /></a>
@@ -62,8 +62,8 @@ We welcome contributions from developers of all skill levels. To get started:
 
 Stay connected with the WebGrip community:
 
-- **Email**: [ryan@webgrip.org](mailto:ryan@webgrip.org)
-- **Website**: [https://webgrip.org](https://webgrip.org)
+- **Email**: [ryan@webgrip.nl](mailto:ryan@webgrip.nl)
+- **Website**: [https://webgrip.nl](https://webgrip.nl)
 - **Twitter**: [@webgrip](https://twitter.com/webgrip)
 - **Medium**: [@webgrip](https://medium.com/@webgrip)
 - **LinkedIn**: [WebGrip](https://www.linkedin.com/company/webgrip)
