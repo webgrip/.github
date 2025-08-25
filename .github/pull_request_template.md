@@ -1,11 +1,37 @@
-## Description
-<!-- Please include a summary of the changes and the related issue. Please also include relevant context. -->
+# Pull Request 🚀
 
-## Checklist:
-- [ ] My code is up to date with upstream, I've pulled in the latest changes
-- [ ] I've added the necessary labels to my PR
+## 📌 Summary
+_What does this PR do?_
+
+---
 
 ## Changelog
+
+### Added
+<!-- Please describe the functionality you added here -->
+
 ### Changed
+<!-- Please describe the functionality you changed here -->
+
+### Deprecated
+<!-- Please describe the functionality you deprecated here -->
+
+### Removed
+<!-- Please describe the functionality you removed here -->
 
 ### Fixed
+<!-- Please describe the functionality you fixed here -->
+
+### Security
+<!-- Please describe the security-related changes here -->
+
+---
+
+## 🔍 Related Issues
+Closes #___
+
+---
+
+## ✅ Checklist
+- [ ] Added documentation
+- [ ] Tests added / updated
