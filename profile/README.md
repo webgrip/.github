@@ -35,8 +35,6 @@ At WebGrip, we believe in the power of open-source software and community collab
 
 > Want a project featured here? Open a PR editing this file.
 
-## Tech Stack
-
 ## 🛠️ Technology Stack
 
 | Category | Technologies |
@@ -106,4 +104,5 @@ If you encounter any issues or have questions:
 ---
 
 *Thank you for looking at my code! Please let me know if you like anything :)*
+
 
