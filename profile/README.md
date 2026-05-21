@@ -1,22 +1,22 @@
 <p align="center">
-	<a href="https://webgrip.nl"><img src="https://img.shields.io/badge/Website-webgrip.nl-0A6484?style=for-the-badge&logo=firefox-browser&logoColor=white" alt="Website" /></a>
-	<a href="https://twitter.com/webgrip"><img src="https://img.shields.io/badge/Follow-@webgrip-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" alt="Twitter" /></a>
-	<a href="https://github.com/webgrip/.github/blob/main/LICENCE"><img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License" /></a>
-	<a href="https://discord.com/invite/1411633519821852734"><img alt="Discord" src="https://img.shields.io/discord/1411633519821852734?style=for-the-badge&logo=discord"></a>
+ <a href="https://webgrip.nl"><img src="https://img.shields.io/badge/Website-webgrip.nl-0A6484?style=for-the-badge&logo=firefox-browser&logoColor=white" alt="Website" /></a>
+ <a href="https://twitter.com/webgrip"><img src="https://img.shields.io/badge/Follow-@webgrip-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white" alt="Twitter" /></a>
+ <a href="https://github.com/webgrip/.github/blob/main/LICENCE"><img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License" /></a>
+ <a href="https://discord.com/invite/1411633519821852734"><img alt="Discord" src="https://img.shields.io/discord/1411633519821852734?style=for-the-badge&logo=discord"></a>
 </p>
 
 <p align="center">
-	<img src="https://komarev.com/ghpvc/?username=webgrip&color=blueviolet&style=for-the-badge" alt="Profile Views" />
-	<img src="https://img.shields.io/github/followers/webgrip?style=for-the-badge&logo=github" alt="Followers" />
-	<img alt="GitHub Org's stars" src="https://img.shields.io/github/stars/webgrip?style=for-the-badge&logo=github&color=yellow">
-	<img src="https://img.shields.io/github/sponsors/webgrip?style=for-the-badge&logo=github&color=turquoise">
+ <img src="https://komarev.com/ghpvc/?username=webgrip&color=blueviolet&style=for-the-badge" alt="Profile Views" />
+ <img src="https://img.shields.io/github/followers/webgrip?style=for-the-badge&logo=github" alt="Followers" />
+ <img alt="GitHub Org's stars" src="https://img.shields.io/github/stars/webgrip?style=for-the-badge&logo=github&color=yellow">
+ <img src="https://img.shields.io/github/sponsors/webgrip?style=for-the-badge&logo=github&color=turquoise">
 </p>
 
 <p align="center">
-	<a href="#tech-stack"><img src="https://img.shields.io/badge/Stack-Overview-4B32C3?style=flat-square" alt="Stack" /></a>
-	<a href="#operational-github-shortcuts"><img src="https://img.shields.io/badge/DevOps-Triage-blue?style=flat-square" alt="Triage" /></a>
-	<a href="#getting-involved"><img src="https://img.shields.io/badge/Contribute-Guide-success?style=flat-square" alt="Contribute" /></a>
-	<a href="#our-coolest-projects"><img src="https://img.shields.io/badge/Projects-Showcase-critical?style=flat-square" alt="Projects" /></a>
+ <a href="#tech-stack"><img src="https://img.shields.io/badge/Stack-Overview-4B32C3?style=flat-square" alt="Stack" /></a>
+ <a href="#operational-github-shortcuts"><img src="https://img.shields.io/badge/DevOps-Triage-blue?style=flat-square" alt="Triage" /></a>
+ <a href="#getting-involved"><img src="https://img.shields.io/badge/Contribute-Guide-success?style=flat-square" alt="Contribute" /></a>
+ <a href="#our-coolest-projects"><img src="https://img.shields.io/badge/Projects-Showcase-critical?style=flat-square" alt="Projects" /></a>
 </p>
 
 **WebGrip** is an organization dedicated to building innovative web tools and applications. Our mission is to empower developers and enhance the web experience for users worldwide.
@@ -60,6 +60,7 @@ At WebGrip, we believe in the power of open-source software and community collab
   <summary><b>📘 Expand for Authors, Philosophies & Architectures</b></summary>
 
 ### Influential Authors
+
 - **Eric Evans** — *Domain-Driven Design: Tackling Complexity in the Heart of Software*  
 - **Vaughn Vernon** — *Implementing DDD*, *DDD Distilled*  
 - **Dan North** — Originator of BDD, champion of executable specifications  
@@ -69,6 +70,7 @@ At WebGrip, we believe in the power of open-source software and community collab
 - **Robert C. Martin (Uncle Bob)** — *Clean Architecture*, *Agile Software Development: Principles, Patterns, and Practices*  
 
 ### Architectural Styles
+
 - **Layered / N-Tier** — traditional separation of concerns  
 - **Hexagonal (Ports & Adapters)** — Alistair Cockburn’s isolation of core domain logic  
 - **Onion Architecture** — Jeffrey Palermo’s evolution of layered architecture  
@@ -110,9 +112,6 @@ If you encounter any issues or have questions:
 
 ---
 
-*Thank you for looking at my code! Please let me know if you like anything :)*
+## Final Note
 
-
-
-
-
+> *Thank you for looking at my code! Please let me know if you like anything :)*
