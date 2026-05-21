@@ -1,0 +1,56 @@
+title: "[General] "
+labels: ["discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## General Discussion
+
+        This is the place for open-ended conversations: meta questions about the organisation, observations, cross-project thoughts, or anything that doesn't fit a bug report or feature idea.
+
+        Please be specific. Vague posts are hard to engage with.
+
+  - type: textarea
+    id: topic
+    attributes:
+      label: What's on your mind?
+      description: Describe the topic you want to discuss. Include any relevant context.
+      placeholder: "I've been thinking about..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Background / context
+      description: Any prior art, related issues, or other context that helps frame the discussion.
+      placeholder: "Related to #123, or inspired by..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Which area does this relate to?
+      options:
+        - Infrastructure / homelab
+        - AI / ML tooling
+        - DevOps / GitOps patterns
+        - Web applications
+        - Organisation / process
+        - Multiple / cross-cutting
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before posting
+      options:
+        - label: I've searched existing discussions and this isn't a duplicate
+          required: true
+        - label: This isn't a bug report (those go in Issues)
+          required: true
+        - label: This isn't a feature idea (those go in the Ideas category)
+          required: true

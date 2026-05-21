@@ -1,0 +1,66 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Questions & Answers
+
+        Use this category for technical questions about any webgrip project.
+
+        **Tips for a useful question:**
+        - Be specific. "It doesn't work" is not a question.
+        - Include what you tried and what happened.
+        - For infrastructure questions: include the relevant Flux/Helm/Kubernetes resource output.
+        - For AI tooling: include the model, prompt, and error if applicable.
+
+        Please search before posting — your question may already be answered.
+
+  - type: input
+    id: project
+    attributes:
+      label: Which project or repository is this about?
+      placeholder: "e.g. homelab-cluster, whisperx-application, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: What's your question?
+      description: State your question as precisely as possible.
+      placeholder: "How do I...? Why does...? What is the expected behaviour of...?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What have you already tried?
+      description: Include commands run, config snippets, error messages, or logs. Use code blocks.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Relevant environment details — Kubernetes version, Flux version, chart version, OS, etc.
+      placeholder: |
+        - Kubernetes: 1.31.x
+        - Flux: v2.x
+        - app-template: 5.0.1
+        - OS: Talos Linux
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before posting
+      options:
+        - label: I searched existing discussions and issues and didn't find an answer
+          required: true
+        - label: I've included enough context for someone to help me without guessing
+          required: true

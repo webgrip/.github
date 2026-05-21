@@ -1,0 +1,64 @@
+title: "[Show & Tell] "
+labels: ["show-and-tell"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Show & Tell
+
+        Built something cool using, inspired by, or connected to a webgrip project? Share it here.
+
+        This could be:
+        - A homelab setup inspired by the cluster repo
+        - An integration or fork of one of the AI tools
+        - A Helm chart, Flux pattern, or GitOps approach you derived from this work
+        - An experiment, a side project, or a demo
+
+        No minimum polish required — rough experiments and half-finished ideas are welcome too.
+
+  - type: input
+    id: project-name
+    attributes:
+      label: What did you build?
+      placeholder: "e.g. My Talos homelab with Flux and Renovate, a fork of whisperx-application, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Tell us about it
+      description: What does it do? What made it interesting or challenging?
+    validations:
+      required: true
+
+  - type: input
+    id: link
+    attributes:
+      label: Link (optional)
+      description: Repository, demo, blog post, screenshot — anything you want to share.
+      placeholder: "https://..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: learnings
+    attributes:
+      label: Key takeaways or learnings
+      description: What would you do differently? What surprised you? What would you recommend to others?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: What area is this in?
+      options:
+        - Infrastructure / homelab / GitOps
+        - AI / ML
+        - Observability / monitoring
+        - Web / applications
+        - DevOps tooling
+        - Something else
+    validations:
+      required: true

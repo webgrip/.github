@@ -1,0 +1,12 @@
+# Funding configuration for webgrip projects.
+# This sponsors button appears on all repositories in the org.
+#
+# Supported platforms: github, patreon, open_collective, ko_fi,
+# tidelift, community_bridge, liberapay, issuehunt, otechie,
+# lfx_crowdfunding, polar, buy_me_a_coffee, thanks_dev, custom
+
+github: [Ryangr0]
+
+# If you find value in the open tooling, infrastructure patterns,
+# or AI experiments published here, a sponsorship helps keep the
+# homelab lights on and more work open-sourced.
