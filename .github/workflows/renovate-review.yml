@@ -3,238 +3,46 @@
 #
 #   jobs:
 #     review:
-#       if: github.event.pull_request.user.login == 'renovate[bot]' ||
-#           github.event.pull_request.user.login == 'dependabot[bot]'
+#       if: |
+#         github.event.pull_request.user.login == 'renovate[bot]' ||
+#         github.event.pull_request.user.login == 'dependabot[bot]'
 #       uses: webgrip/.github/.github/workflows/renovate-review.yml@main
 #       secrets: inherit
+#
+# Required org secret: COPILOT_PAT
+#   Classic PAT (repo scope) from a Copilot Business/Enterprise licensed user.
+#   The Copilot agent assignment API requires a user token — GITHUB_TOKEN won't work.
 name: Renovate PR Review (reusable)
 
 on:
-  workflow_call:
-    inputs:
-      model:
-        description: "GitHub Models model ID (https://github.com/marketplace/models)"
-        type: string
-        default: "openai/gpt-4o"
+  workflow_call: {}
 
 jobs:
-  ai-review:
-    name: AI Dependency Review
+  assign-copilot:
+    name: Assign Copilot renovate-reviewer
     runs-on: ubuntu-latest
 
     permissions:
-      contents: read       # checkout
-      pull-requests: write # post comment
-      models: read         # GitHub Models API
+      pull-requests: write
+      issues: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Review dependency update
+      - name: Assign Copilot with renovate-reviewer agent
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PR_NUMBER:    ${{ github.event.pull_request.number }}
-          REVIEW_MODEL: ${{ inputs.model }}
+          GH_TOKEN: ${{ secrets.COPILOT_PAT }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
-          python3 - << 'PYEOF'
-          import json, os, re, sys, urllib.error, urllib.request
-
-          TOKEN     = os.environ["GITHUB_TOKEN"]
-          REPO      = os.environ["GITHUB_REPOSITORY"]
-          PR_NUMBER = os.environ["PR_NUMBER"]
-          MODEL     = os.environ.get("REVIEW_MODEL", "openai/gpt-4o")
-          SENTINEL  = "<!-- renovate-ai-review -->"
-          MAX_DIFF  = 15_000
-          MAX_BODY  = 8_000
-
-          # ── Full system prompt (mirrors .github-private/agents/renovate-reviewer.agent.md) ──
-          FALLBACK_PROMPT = """
-          You are a dependency update reviewer, release-note analyst, and software supply-chain risk assessor.
-
-          Your job is to review dependency update pull requests, especially Renovate PRs, and produce a clear
-          engineering decision aid: what changed, what could break, how risky it is, and what the maintainer
-          should verify before merging.
-
-          You are not an implementation agent. You do not edit files, push commits, approve pull requests,
-          request formal changes, or merge anything. You investigate and publish one high-quality assessment comment.
-
-          ## Operating principles
-          1. Evidence beats optimism. Do not assume an update is safe because it is automated.
-          2. Be generic. Do not rely on repository-specific conventions unless you discover them during the review.
-          3. Signal-to-noise discipline. Every sentence must help the maintainer decide. No padding.
-          4. Proportionality. A patch lockfile bump needs three sentences; a major DB driver upgrade needs a full investigation.
-          5. Humility. If evidence is missing, say so explicitly rather than fabricating confidence.
-
-          ## Risk model
-          | Tier | Label | Criteria |
-          |------|-------|----------|
-          | 1 | 🟢 Low | PATCH/MINOR, no breaking changes, no CVEs, healthy supply chain |
-          | 2 | 🟡 Caution | MINOR with behavioral changes; PATCH to security lib; no changelog |
-          | 3 | 🟠 High | MAJOR bump; security-critical lib; pre-release; CRD/values changes; base image OS change |
-          | 4 | 🔴 Blocking | CVE introduced; breaking change with no migration; supply chain failure; license change |
-          | 5 | ⬜ Unknown | No changelog, no release notes, non-semver with no docs |
-
-          Escalation: any 🔴 makes the PR 🔴. Two+ 🟠 without mitigation → 🔴. 🟡 on security lib → 🟠.
-
-          ## Recommendations
-          ✅ Merge | ⚠️ Merge after checks | 🛑 Hold | ✂️ Split PR | 🔍 Investigate
-
-          ## For each dependency, check
-          - Fetch and read changelog / release notes at the new version tag
-          - Identify API, config key, CLI flag, or env var changes
-          - Check CVEs fixed or introduced
-          - Docker: base OS change, digest match, privilege changes
-          - Helm: CRD changes, values key renames, kubeVersion constraint, HelmRelease compatibility
-          - Actions: SHA pinning, new permissions, pull_request_target misuse
-          - Security libs (TLS/auth/crypto/JWT): always High-attention regardless of semver
-          - Terraform: resource schema changes, state migration, provider protocol version
-
-          ## Supply chain signals to report
-          - Publisher identity unchanged?
-          - Release signed (Sigstore/GPG/GitHub Attestations)?
-          - Build via CI?
-          - License unchanged?
-          - Maintainer activity healthy?
-
-          ## Output template (produce exactly this structure)
-
-          ### 🔍 Dependency Update Review
-          > *Automated supply-chain risk assessment. A human maintainer makes the final merge decision.*
-
-          **Overall risk:** [EMOJI LABEL] | **Recommendation:** [EMOJI LABEL]
-
-          ---
-          #### 📦 Update inventory
-          | Dependency | From | To | Type | Ecosystem | Risk |
-          |---|---|---|---|---|---|
-
-          ---
-          #### 🔎 Change analysis
-          For each dependency: what changed, CVEs fixed/introduced, breaking changes, release notes quality.
-
-          ---
-          #### 🏗️ Repository impact
-          - Workloads/services affected:
-          - Configuration changes required:
-          - Test coverage:
-
-          ---
-          #### 🔐 Supply chain signals
-          | Signal | Status |
-          |---|---|
-          | Publisher identity | |
-          | Release signed | |
-          | Build via CI | |
-          | License | |
-          | Maintainer activity | |
-
-          ---
-          #### ✅ Pre-merge checklist
-          - [ ] (specific actionable items, or omit section if none)
-
-          ---
-          #### 💬 Notes
-          (omit if empty)
-          """
-
-          def _gh(path, method="GET", accept="application/vnd.github+json", body=None):
-              req = urllib.request.Request(
-                  f"https://api.github.com{path}",
-                  data=json.dumps(body).encode() if body else None,
-                  method=method,
-              )
-              req.add_header("Authorization", f"Bearer {TOKEN}")
-              req.add_header("Accept", accept)
-              req.add_header("X-GitHub-Api-Version", "2022-11-28")
-              if body:
-                  req.add_header("Content-Type", "application/json")
-              with urllib.request.urlopen(req) as r:
-                  raw = r.read()
-              return json.loads(raw) if accept == "application/vnd.github+json" else raw.decode("utf-8", errors="replace")
-
-          def find_sentinel_comment():
-              for c in _gh(f"/repos/{REPO}/issues/{PR_NUMBER}/comments"):
-                  if SENTINEL in c.get("body", ""):
-                      return c["id"]
-              return None
-
-          def upsert_comment(text, existing_id=None):
-              full = f"{SENTINEL}\n{text}"
-              if existing_id:
-                  _gh(f"/repos/{REPO}/issues/comments/{existing_id}", method="PATCH", body={"body": full})
-                  print(f"[review] Updated comment id={existing_id}")
-              else:
-                  _gh(f"/repos/{REPO}/issues/{PR_NUMBER}/comments", method="POST", body={"body": full})
-                  print("[review] Posted new comment")
-
-          def load_system_prompt():
-              for candidate in [".github/agents/renovate-reviewer.agent.md", ".github/agents/renovate-reviewer.md"]:
-                  if os.path.exists(candidate):
-                      content = open(candidate).read()
-                      parts = re.split(r"^---[ \t]*$", content, flags=re.MULTILINE)
-                      body = parts[2].strip() if len(parts) >= 3 else content.strip()
-                      print(f"[review] Using agent file: {candidate}")
-                      return body
-              print("[review] No agent file found – using built-in prompt")
-              return FALLBACK_PROMPT.strip()
-
-          def call_models(system_prompt, user_prompt):
-              payload = {
-                  "model": MODEL,
-                  "messages": [
-                      {"role": "system", "content": system_prompt},
-                      {"role": "user",   "content": user_prompt},
-                  ],
-                  "max_tokens": 4096,
-                  "temperature": 0.1,
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${REPO}/issues/${PR_NUMBER}/assignees" \
+            --input - <<< '{
+              "assignees": ["copilot-swe-agent[bot]"],
+              "agent_assignment": {
+                "target_repo": "'"${REPO}"'",
+                "custom_agent": "renovate-reviewer",
+                "custom_instructions": "This is an automated Renovate/Dependabot dependency update PR. Use the renovate-reviewer custom agent. Produce a supply-chain risk assessment comment only. Do NOT make code changes, do NOT push commits, do NOT create branches, do NOT approve or merge the PR."
               }
-              req = urllib.request.Request(
-                  "https://models.github.ai/inference/chat/completions",
-                  data=json.dumps(payload).encode(), method="POST",
-              )
-              req.add_header("Authorization", f"Bearer {TOKEN}")
-              req.add_header("Content-Type", "application/json")
-              try:
-                  with urllib.request.urlopen(req) as r:
-                      return json.loads(r.read())["choices"][0]["message"]["content"]
-              except urllib.error.HTTPError as exc:
-                  print(f"[review] Models API HTTP {exc.code}: {exc.read().decode()}", file=sys.stderr)
-                  sys.exit(1)
-
-          pr    = _gh(f"/repos/{REPO}/pulls/{PR_NUMBER}")
-          diff  = _gh(f"/repos/{REPO}/pulls/{PR_NUMBER}", accept="application/vnd.github.diff")
-          files = _gh(f"/repos/{REPO}/pulls/{PR_NUMBER}/files")
-
-          flist = "\n".join(f"- `{f['filename']}` (+{f['additions']} -{f['deletions']})" for f in files)
-          body_text = (pr.get("body") or "")[:MAX_BODY]
-          diff_text = diff[:MAX_DIFF] + ("\n\n… [diff truncated] …" if len(diff) > MAX_DIFF else "")
-
-          user_prompt = f"""Review this dependency update pull request.
-
-          **Title:** {pr['title']}
-          **Author:** {pr['user']['login']}
-          **Labels:** {", ".join(l["name"] for l in pr.get("labels", [])) or "none"}
-          **Repository:** {REPO}
-
-          ### Changed files
-          {flist}
-
-          ### PR body / release notes
-          {body_text or "_No PR body._"}
-
-          ### Diff
-          ```diff
-          {diff_text}
-          ```
-
-          Produce the full structured review. Be specific about the files, versions, and workloads shown."""
-
-          system_prompt = load_system_prompt()
-          print(f"[review] Calling {MODEL} via GitHub Models API...")
-          review = call_models(system_prompt, user_prompt)
-          upsert_comment(review, find_sentinel_comment())
-          print("[review] Done.")
-          PYEOF
+            }'
