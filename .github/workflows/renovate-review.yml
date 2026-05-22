@@ -8,8 +8,8 @@
 #
 # Requires:
 # - Actions org/repo secret `COPILOT_AGENT_TOKEN` for assigning Copilot.
-# - Copilot Agents org/repo secret `COPILOT_MCP_GITHUB_PERSONAL_ACCESS_TOKEN`
-#   for the renovate-reviewer writable GitHub MCP server.
+# - Copilot Agents org secret `COPILOT_MCP_GITHUB_PAT` (fine-grained PAT with
+#   issues:write + pull-requests:write) for the renovate-reviewer writable MCP server.
 name: Renovate PR Review (reusable)
 
 on:

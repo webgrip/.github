@@ -94,7 +94,7 @@ runs:
 
         Do not rely only on the context in this issue. Fetch the live PR metadata, changed files, diff, relevant repository files, and upstream release notes/changelogs/advisories yourself before writing the review.
 
-        To post or update the PR comment use the \`execute\` tool to run \`gh pr comment\` or \`gh api\` with the token in your shell environment (\`GH_TOKEN\` / \`GITHUB_TOKEN\`).
+        To post or update the PR comment use the \`github-writer\` MCP tools. Do not create a pull request, branch, or commit — not even as a fallback if posting the comment fails. If you cannot post the comment, add a comment to this tracking issue explaining why.
 
         Post or update exactly one comment on ${pr_url}. The first line of the comment body must be the literal sentinel \`${REVIEW_SENTINEL}\`.
 
@@ -113,7 +113,7 @@ runs:
         ${pr_body}
         EOF
 
-        custom_instructions="Use the ${AGENT_NAME} custom agent. Review the PR, then post/update one PR comment with the ${REVIEW_SENTINEL} sentinel using 'gh pr comment' or 'gh api' via the shell. Close the tracking issue when done. Do not edit files or create code changes."
+        custom_instructions="Use the ${AGENT_NAME} custom agent. Post or update one PR comment with the ${REVIEW_SENTINEL} sentinel using the github-writer MCP tools. Close the tracking issue when done. Do NOT create a pull request or branch under any circumstances, even as a fallback."
         issue_title="Renovate agent review for #${PR_NUMBER}: ${PR_TITLE}"
         if [ "${#issue_title}" -gt 240 ]; then
           issue_title="${issue_title:0:237}..."
