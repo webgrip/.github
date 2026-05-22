@@ -6,25 +6,17 @@
 #       uses: webgrip/.github/.github/workflows/renovate-review.yml@main
 #       secrets: inherit
 #
-# To use the Copilot agent backend, pass a user token with actions, contents,
-# issues, and pull requests permissions as secrets.COPILOT_AGENT_TOKEN. GitHub
-# documents Copilot issue assignment as requiring a user token. Set review-mode:
-# inference to use the legacy GitHub Models backend with GITHUB_TOKEN only.
+# Requires:
+# - Actions org/repo secret `COPILOT_AGENT_TOKEN` for assigning Copilot.
+# - Copilot Agents org/repo secret `COPILOT_MCP_GITHUB_PERSONAL_ACCESS_TOKEN`
+#   for the renovate-reviewer writable GitHub MCP server.
 name: Renovate PR Review (reusable)
 
 on:
   workflow_call:
-    inputs:
-      review-mode:
-        description: >
-          Review backend to use: copilot-agent dispatches the org-level
-          renovate-reviewer custom agent; inference uses actions/ai-inference.
-        required: false
-        default: copilot-agent
-        type: string
     secrets:
       COPILOT_AGENT_TOKEN:
-        required: false
+        required: true
 
 concurrency:
   group: renovate-review-${{ github.repository }}-${{ github.event.pull_request.number }}
@@ -36,18 +28,15 @@ jobs:
     runs-on: arc-runner-set
 
     permissions:
-      contents: read        # checkout prompt + fetch diff
-      issues: write         # create Copilot agent tracking issue
-      pull-requests: write  # post comment in inference mode
-      models: read          # GitHub Models inference fallback
+      contents: read       # fetch PR context
+      issues: write        # create Copilot agent tracking issue
+      pull-requests: read  # read PR metadata
 
     steps:
       - name: Run renovate review
         uses: webgrip/.github/actions/renovate-review@main
         with:
-          token: ${{ github.token }}
           agent-token: ${{ secrets.COPILOT_AGENT_TOKEN }}
-          review-mode: ${{ inputs.review-mode }}
           base-ref: ${{ github.event.pull_request.base.ref }}
           pr-number: ${{ github.event.pull_request.number }}
           pr-title: ${{ github.event.pull_request.title }}

@@ -1,6 +1,6 @@
 ---
 name: renovate-reviewer
-description: Read-only supply-chain risk assessor for Renovate and Dependabot dependency update pull requests.
+description: Supply-chain risk assessor for Renovate and Dependabot dependency update pull requests that publishes one assessment comment.
 tools: ["read", "search", "execute", "github/*", "web"]
 ---
 
@@ -41,6 +41,8 @@ When invoked on a PR:
 4. Search the repository for dependency names, image names, action names, module paths, chart names, provider names, package imports, and related configuration.
 5. Look up upstream context when accessible: releases, changelog files, migration guides, compare links, tags, advisories, and package metadata.
 6. Post or update exactly one final assessment comment on the PR. If the task gives a sentinel comment marker, use it exactly.
+
+To post or update the PR comment, use the `execute` tool to run `gh pr comment` or `gh api` with the token available in your shell environment (`GH_TOKEN` or `GITHUB_TOKEN`). After posting, close the tracking issue with `gh issue close`.
 
 Prefer evidence in this order:
 

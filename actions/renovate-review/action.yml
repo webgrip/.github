@@ -2,33 +2,17 @@
 name: Renovate AI Review
 description: >
   Reviews dependency update pull requests by dispatching the org-wide
-  renovate-reviewer Copilot agent, or by running GitHub Models inference as
-  a fallback.
+  renovate-reviewer Copilot cloud agent.
 
 inputs:
-  token:
-    description: >
-      GitHub token with contents:read, pull-requests:write, models:read, and
-      issues:write when review-mode is copilot-agent.
-      Defaults to the calling workflow's GITHUB_TOKEN.
-    required: false
-    default: ${{ github.token }}
   agent-token:
     description: >
       User token used to assign Copilot cloud agent. GitHub documents Copilot
       issue assignment as requiring a user token with actions, contents, issues,
-      and pull requests permissions; if omitted, token is used.
-    required: false
-    default: ""
-  review-mode:
-    description: >
-      Review backend to use. "copilot-agent" dispatches the renovate-reviewer
-      custom agent so it can inspect live repository and upstream context.
-      "inference" keeps the legacy actions/ai-inference behavior.
-    required: false
-    default: copilot-agent
+      and pull requests permissions.
+    required: true
   agent-name:
-    description: Custom Copilot agent profile name to use in copilot-agent mode.
+    description: Custom Copilot agent profile name to use.
     required: false
     default: renovate-reviewer
   base-ref:
@@ -51,92 +35,10 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Validate review mode
-      shell: bash
-      env:
-        REVIEW_MODE: ${{ inputs.review-mode }}
-      run: |
-        case "${REVIEW_MODE}" in
-          copilot-agent|inference)
-            ;;
-          *)
-            echo "::error::Unsupported review-mode '${REVIEW_MODE}'. Use 'copilot-agent' or 'inference'."
-            exit 1
-            ;;
-        esac
-
-    - name: Checkout org prompt file
-      if: ${{ inputs.review-mode == 'inference' }}
-      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      with:
-        repository: webgrip/.github
-        path: .renovate-review-action
-        sparse-checkout: .github/prompts/renovate-review.prompt.yml
-        sparse-checkout-cone-mode: false
-        persist-credentials: false
-
-    - name: Fetch PR context
-      if: ${{ inputs.review-mode == 'inference' }}
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.token }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        REPO: ${{ inputs.repository }}
-      run: |
-        gh api "/repos/${REPO}/pulls/${PR_NUMBER}" \
-          -H "Accept: application/vnd.github.diff" | head -c 14000 > /tmp/pr.diff
-
-        gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files" \
-          --jq '.[] | "- `\(.filename)` (+\(.additions) -\(.deletions))"' \
-          | head -50 > /tmp/pr-files.txt
-
-        gh api "/repos/${REPO}/pulls/${PR_NUMBER}" \
-          --jq '.body // "_No PR body._"' | head -c 6000 > /tmp/pr-body.txt
-
-    - name: Run AI inference
-      if: ${{ inputs.review-mode == 'inference' }}
-      id: inference
-      uses: actions/ai-inference@17ff458cb182449bbb2e43701fcd98f6af8f6570 # v2.1.0
-      with:
-        prompt-file: .renovate-review-action/.github/prompts/renovate-review.prompt.yml
-        input: |
-          repo: ${{ inputs.repository }}
-          number: ${{ inputs.pr-number }}
-          title: ${{ inputs.pr-title }}
-          author: ${{ inputs.pr-author }}
-        file_input: |
-          files: /tmp/pr-files.txt
-          body: /tmp/pr-body.txt
-          diff: /tmp/pr.diff
-
-    - name: Post review comment
-      if: ${{ inputs.review-mode == 'inference' }}
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.token }}
-        PR_NUMBER: ${{ inputs.pr-number }}
-        REPO: ${{ inputs.repository }}
-        RESPONSE_FILE: ${{ steps.inference.outputs.response-file }}
-        SENTINEL: "<!-- renovate-ai-review -->"
-      run: |
-        BODY="$(printf '%s\n' "${SENTINEL}"; cat "${RESPONSE_FILE}")"
-
-        COMMENT_ID=$(gh api "/repos/${REPO}/issues/${PR_NUMBER}/comments" \
-          --jq ".[] | select(.body | contains(\"${SENTINEL}\")) | .id" | head -1)
-
-        if [ -n "$COMMENT_ID" ]; then
-          gh api --method PATCH "/repos/${REPO}/issues/comments/${COMMENT_ID}" \
-            -f body="${BODY}"
-        else
-          gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body "${BODY}"
-        fi
-
     - name: Dispatch Copilot renovate reviewer
-      if: ${{ inputs.review-mode == 'copilot-agent' }}
       shell: bash
       env:
         AGENT_TOKEN: ${{ inputs.agent-token }}
-        FALLBACK_TOKEN: ${{ inputs.token }}
         PR_NUMBER: ${{ inputs.pr-number }}
         PR_TITLE: ${{ inputs.pr-title }}
         PR_AUTHOR: ${{ inputs.pr-author }}
@@ -145,7 +47,8 @@ runs:
         AGENT_NAME: ${{ inputs.agent-name }}
         REVIEW_SENTINEL: "<!-- renovate-ai-review -->"
       run: |
-        export GH_TOKEN="${AGENT_TOKEN:-$FALLBACK_TOKEN}"
+        : "${AGENT_TOKEN:?missing agent-token input}"
+        export GH_TOKEN="${AGENT_TOKEN}"
 
         marker="renovate-agent-review:${REPO}#${PR_NUMBER}"
         pr_url="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" --jq '.html_url')"
@@ -191,13 +94,15 @@ runs:
 
         Do not rely only on the context in this issue. Fetch the live PR metadata, changed files, diff, relevant repository files, and upstream release notes/changelogs/advisories yourself before writing the review.
 
-        Post or update exactly one comment on ${pr_url}. The comment body must start with:
+        To post or update the PR comment use the \`execute\` tool to run \`gh pr comment\` or \`gh api\` with the token in your shell environment (\`GH_TOKEN\` / \`GITHUB_TOKEN\`).
 
-        ${REVIEW_SENTINEL}
+        Post or update exactly one comment on ${pr_url}. The first line of the comment body must be the literal sentinel \`${REVIEW_SENTINEL}\`.
 
         If a PR comment containing that sentinel already exists, update it instead of creating a duplicate.
 
-        Do not modify repository files, push commits, open a code-change PR, approve, merge, close, or retitle the pull request. After posting or updating the PR comment, close this tracking issue as completed.
+        Do not modify repository files, push commits, open a code-change pull request, approve, merge, close, or retitle the pull request.
+
+        After posting or updating the PR comment, close this tracking issue as completed.
 
         ## Initial changed files snapshot
 
@@ -208,24 +113,33 @@ runs:
         ${pr_body}
         EOF
 
-        custom_instructions="Use the ${AGENT_NAME} custom agent. This is a read-only PR review task: inspect live repository and upstream context, then post or update one PR comment with the ${REVIEW_SENTINEL} sentinel. Do not edit files or create code changes."
+        custom_instructions="Use the ${AGENT_NAME} custom agent. Review the PR, then post/update one PR comment with the ${REVIEW_SENTINEL} sentinel using 'gh pr comment' or 'gh api' via the shell. Close the tracking issue when done. Do not edit files or create code changes."
         issue_title="Renovate agent review for #${PR_NUMBER}: ${PR_TITLE}"
         if [ "${#issue_title}" -gt 240 ]; then
           issue_title="${issue_title:0:237}..."
         fi
 
-        issue_url="$(gh api \
+        issue_number="$(gh api \
           --method POST \
           -H "Accept: application/vnd.github+json" \
           -H "X-GitHub-Api-Version: 2022-11-28" \
           "/repos/${REPO}/issues" \
           -f title="${issue_title}" \
           -F body="@${body_file}" \
+          --jq '.number')"
+
+        gh api \
+          --method POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "/repos/${REPO}/issues/${issue_number}/assignees" \
           -f 'assignees[]=copilot-swe-agent[bot]' \
           -f "agent_assignment[target_repo]=${REPO}" \
           -f "agent_assignment[base_branch]=${BASE_REF}" \
           -f "agent_assignment[custom_agent]=${AGENT_NAME}" \
           -f "agent_assignment[custom_instructions]=${custom_instructions}" \
-          --jq '.html_url')"
+          --silent
+
+        issue_url="https://github.com/${REPO}/issues/${issue_number}"
 
         echo "Dispatched ${AGENT_NAME} via ${issue_url}"
