@@ -4,19 +4,12 @@
 #   jobs:
 #     review:
 #       uses: webgrip/.github/.github/workflows/renovate-review.yml@main
-#       secrets: inherit
 #
-# Requires:
-# - Actions org/repo secret `COPILOT_AGENT_TOKEN` for assigning Copilot.
-# - Copilot Agents org secret `COPILOT_MCP_GITHUB_PAT` (fine-grained PAT with
-#   issues:write + pull-requests:write) for the renovate-reviewer writable MCP server.
+# No extra secrets required. Uses GITHUB_TOKEN from the calling job.
 name: Renovate PR Review (reusable)
 
 on:
   workflow_call:
-    secrets:
-      COPILOT_AGENT_TOKEN:
-        required: true
 
 concurrency:
   group: renovate-review-${{ github.repository }}-${{ github.event.pull_request.number }}
@@ -28,17 +21,13 @@ jobs:
     runs-on: arc-runner-set
 
     permissions:
-      contents: read       # fetch PR context
-      issues: write        # create Copilot agent tracking issue
-      pull-requests: read  # read PR metadata
+      contents: read        # fetch PR diff and files
+      pull-requests: write  # post review comment
+      models: read          # GitHub Models inference
 
     steps:
-      - name: Run renovate review
-        uses: webgrip/.github/actions/renovate-review@main
+      - uses: webgrip/.github/actions/renovate-review@main
         with:
-          agent-token: ${{ secrets.COPILOT_AGENT_TOKEN }}
-          base-ref: ${{ github.event.pull_request.base.ref }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           pr-number: ${{ github.event.pull_request.number }}
-          pr-title: ${{ github.event.pull_request.title }}
-          pr-author: ${{ github.event.pull_request.user.login }}
           repository: ${{ github.repository }}

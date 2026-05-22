@@ -1,36 +1,134 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-action.json
 name: Renovate AI Review
 description: >
-  Reviews dependency update pull requests by dispatching the org-wide
-  renovate-reviewer Copilot cloud agent.
+  Reviews dependency update pull requests: fetches live PR context, calls
+  GitHub Models to generate a risk assessment, and posts it as a PR comment.
 
 inputs:
-  agent-token:
+  github-token:
     description: >
-      User token used to assign Copilot cloud agent. GitHub documents Copilot
-      issue assignment as requiring a user token with actions, contents, issues,
-      and pull requests permissions.
+      Token with pull-requests:write and models:read permissions.
+      Use the job GITHUB_TOKEN.
     required: true
-  agent-name:
-    description: Custom Copilot agent profile name to use.
-    required: false
-    default: renovate-reviewer
-  base-ref:
-    description: Pull request base branch for Copilot agent assignment.
-    required: false
-    default: main
   pr-number:
-    description: Pull request number.
-    required: true
-  pr-title:
-    description: Pull request title.
-    required: true
-  pr-author:
-    description: GitHub login of the PR author.
+    description: Pull request number to review.
     required: true
   repository:
     description: Repository in owner/name format.
     required: true
+  model:
+    description: GitHub Models model ID to use.
+    required: false
+    default: openai/gpt-4.1
+
+runs:
+  using: composite
+  steps:
+    - name: Generate and post dependency review
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        REPO: ${{ inputs.repository }}
+        MODEL: ${{ inputs.model }}
+        SENTINEL: "<!-- renovate-ai-review -->"
+      run: |
+        set -euo pipefail
+
+        # ── 1. Fetch live PR context ───────────────────────────────────────────
+        pr_json=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}")
+        pr_url=$(   echo "${pr_json}" | jq -r '.html_url')
+        pr_title=$( echo "${pr_json}" | jq -r '.title')
+        pr_author=$(echo "${pr_json}" | jq -r '.user.login')
+        pr_labels=$(echo "${pr_json}" | jq -r '[.labels[].name] | join(", ")')
+        pr_body=$(  echo "${pr_json}" | jq -r '.body // "_No description._"' | head -c 2000)
+
+        files=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files" \
+          --jq '.[:60] | .[] | "- `\(.filename)` +\(.additions)/-\(.deletions) [\(.status)]"')
+
+        diff=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" \
+          -H "Accept: application/vnd.github.v3.diff" 2>/dev/null \
+          | head -c 8000 || echo "(diff unavailable)")
+
+        # ── 2. Call GitHub Models ──────────────────────────────────────────────
+        payload=$(jq -n \
+          --arg model  "${MODEL}" \
+          --arg system "You are a supply-chain risk assessor reviewing dependency update pull requests. Be concise, factual, and actionable. Do not fabricate version history, CVEs, or release notes you cannot verify from the provided context." \
+          --arg user   "## PR: ${pr_title}
+Repository: ${REPO}  |  PR #${PR_NUMBER}
+Author: @${pr_author}  |  Labels: ${pr_labels:-none}
+URL: ${pr_url}
+
+## Changed files
+${files}
+
+## Diff (first 8 KB)
+\`\`\`diff
+${diff}
+\`\`\`
+
+## PR body
+${pr_body}
+
+---
+Produce a risk assessment with this structure:
+
+**Verdict:** Green / Yellow Caution / Red Block
+**Recommendation:** Merge / Merge after checks / Do not merge
+**Confidence:** High / Medium / Low
+
+### What changed
+Dependency name, old → new version, update type.
+
+### Upstream changes
+Breaking changes, migration notes, security fixes between the two versions.
+
+### Local impact
+How this dependency is used in this repo; which workloads or services are affected.
+
+### Pre-merge checks
+Concrete, actionable items the reviewer should verify before merging.
+
+### Risk rationale
+Why you assigned the verdict above." \
+          '{
+            model: $model,
+            messages: [
+              {role: "system", content: $system},
+              {role: "user",   content: $user}
+            ],
+            max_tokens: 1500
+          }')
+
+        response=$(curl -sf \
+          -H "Authorization: Bearer ${GH_TOKEN}" \
+          -H "Content-Type: application/json" \
+          "https://models.inference.ai.azure.com/chat/completions" \
+          -d "${payload}")
+
+        review=$(echo "${response}" | jq -r '.choices[0].message.content // empty')
+
+        if [ -z "${review}" ]; then
+          echo "::error::Models API returned no content: $(echo "${response}" | jq -c .)"
+          exit 1
+        fi
+
+        # ── 3. Post or update the PR comment ──────────────────────────────────
+        comment_body="${SENTINEL}
+${review}"
+
+        existing_id=$(gh api "/repos/${REPO}/issues/${PR_NUMBER}/comments" \
+          --jq "[.[] | select(.body | startswith(\"${SENTINEL}\"))][0].id // empty")
+
+        if [ -n "${existing_id}" ]; then
+          gh api --method PATCH \
+            "/repos/${REPO}/issues/comments/${existing_id}" \
+            -f body="${comment_body}" --silent
+          echo "Updated review comment (ID ${existing_id}) on ${pr_url}"
+        else
+          gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body "${comment_body}"
+          echo "Posted review comment on ${pr_url}"
+        fi
 
 runs:
   using: composite
