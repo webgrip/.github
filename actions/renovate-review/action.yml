@@ -1,17 +1,40 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-action.json
 name: Renovate AI Review
 description: >
-  Fetches PR diff and context, runs AI inference using the org-wide
-  renovate-review prompt, and posts (or updates) a supply-chain risk
-  assessment comment on the pull request.
+  Reviews dependency update pull requests by dispatching the org-wide
+  renovate-reviewer Copilot agent, or by running GitHub Models inference as
+  a fallback.
 
 inputs:
   token:
     description: >
-      GitHub token with contents:read, pull-requests:write, and models:read.
+      GitHub token with contents:read, pull-requests:write, models:read, and
+      issues:write when review-mode is copilot-agent.
       Defaults to the calling workflow's GITHUB_TOKEN.
     required: false
     default: ${{ github.token }}
+  agent-token:
+    description: >
+      User token used to assign Copilot cloud agent. GitHub documents Copilot
+      issue assignment as requiring a user token with actions, contents, issues,
+      and pull requests permissions; if omitted, token is used.
+    required: false
+    default: ""
+  review-mode:
+    description: >
+      Review backend to use. "copilot-agent" dispatches the renovate-reviewer
+      custom agent so it can inspect live repository and upstream context.
+      "inference" keeps the legacy actions/ai-inference behavior.
+    required: false
+    default: copilot-agent
+  agent-name:
+    description: Custom Copilot agent profile name to use in copilot-agent mode.
+    required: false
+    default: renovate-reviewer
+  base-ref:
+    description: Pull request base branch for Copilot agent assignment.
+    required: false
+    default: main
   pr-number:
     description: Pull request number.
     required: true
@@ -28,7 +51,22 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Validate review mode
+      shell: bash
+      env:
+        REVIEW_MODE: ${{ inputs.review-mode }}
+      run: |
+        case "${REVIEW_MODE}" in
+          copilot-agent|inference)
+            ;;
+          *)
+            echo "::error::Unsupported review-mode '${REVIEW_MODE}'. Use 'copilot-agent' or 'inference'."
+            exit 1
+            ;;
+        esac
+
     - name: Checkout org prompt file
+      if: ${{ inputs.review-mode == 'inference' }}
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         repository: webgrip/.github
@@ -38,6 +76,7 @@ runs:
         persist-credentials: false
 
     - name: Fetch PR context
+      if: ${{ inputs.review-mode == 'inference' }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
@@ -55,6 +94,7 @@ runs:
           --jq '.body // "_No PR body._"' | head -c 6000 > /tmp/pr-body.txt
 
     - name: Run AI inference
+      if: ${{ inputs.review-mode == 'inference' }}
       id: inference
       uses: actions/ai-inference@17ff458cb182449bbb2e43701fcd98f6af8f6570 # v2.1.0
       with:
@@ -70,6 +110,7 @@ runs:
           diff: /tmp/pr.diff
 
     - name: Post review comment
+      if: ${{ inputs.review-mode == 'inference' }}
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
@@ -89,3 +130,102 @@ runs:
         else
           gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body "${BODY}"
         fi
+
+    - name: Dispatch Copilot renovate reviewer
+      if: ${{ inputs.review-mode == 'copilot-agent' }}
+      shell: bash
+      env:
+        AGENT_TOKEN: ${{ inputs.agent-token }}
+        FALLBACK_TOKEN: ${{ inputs.token }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_TITLE: ${{ inputs.pr-title }}
+        PR_AUTHOR: ${{ inputs.pr-author }}
+        REPO: ${{ inputs.repository }}
+        BASE_REF: ${{ inputs.base-ref }}
+        AGENT_NAME: ${{ inputs.agent-name }}
+        REVIEW_SENTINEL: "<!-- renovate-ai-review -->"
+      run: |
+        export GH_TOKEN="${AGENT_TOKEN:-$FALLBACK_TOKEN}"
+
+        marker="renovate-agent-review:${REPO}#${PR_NUMBER}"
+        pr_url="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" --jq '.html_url')"
+        pr_body="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" --jq '.body // "_No PR body._"')"
+        files="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files" \
+          --jq '.[] | "- `\(.filename)` (+\(.additions) -\(.deletions))"' \
+          | head -50)"
+
+        stale_issues="$(gh api --method GET /search/issues \
+          -f q="repo:${REPO} is:issue is:open \"${marker}\"" \
+          --jq '.items[].number')"
+
+        if [ -n "${stale_issues}" ]; then
+          while IFS= read -r stale_issue; do
+            [ -z "${stale_issue}" ] && continue
+            gh issue close "${stale_issue}" \
+              --repo "${REPO}" \
+              --comment "Superseded by a newer Renovate agent review dispatch for ${pr_url}."
+          done <<< "${stale_issues}"
+        fi
+
+        body_file="$(mktemp)"
+        cleanup() {
+          rm -f "${body_file}"
+        }
+        trap cleanup EXIT
+
+        cat > "${body_file}" <<EOF
+        # Renovate dependency review task
+
+        Marker: \`${marker}\`
+
+        Review pull request: ${pr_url}
+        Repository: \`${REPO}\`
+        Pull request: #${PR_NUMBER}
+        Title: ${PR_TITLE}
+        Author: @${PR_AUTHOR}
+        Base branch: \`${BASE_REF}\`
+
+        ## Task
+
+        Use the \`${AGENT_NAME}\` custom agent instructions to produce the dependency update review for the linked pull request.
+
+        Do not rely only on the context in this issue. Fetch the live PR metadata, changed files, diff, relevant repository files, and upstream release notes/changelogs/advisories yourself before writing the review.
+
+        Post or update exactly one comment on ${pr_url}. The comment body must start with:
+
+        ${REVIEW_SENTINEL}
+
+        If a PR comment containing that sentinel already exists, update it instead of creating a duplicate.
+
+        Do not modify repository files, push commits, open a code-change PR, approve, merge, close, or retitle the pull request. After posting or updating the PR comment, close this tracking issue as completed.
+
+        ## Initial changed files snapshot
+
+        ${files}
+
+        ## Initial PR body snapshot
+
+        ${pr_body}
+        EOF
+
+        custom_instructions="Use the ${AGENT_NAME} custom agent. This is a read-only PR review task: inspect live repository and upstream context, then post or update one PR comment with the ${REVIEW_SENTINEL} sentinel. Do not edit files or create code changes."
+        issue_title="Renovate agent review for #${PR_NUMBER}: ${PR_TITLE}"
+        if [ "${#issue_title}" -gt 240 ]; then
+          issue_title="${issue_title:0:237}..."
+        fi
+
+        issue_url="$(gh api \
+          --method POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "/repos/${REPO}/issues" \
+          -f title="${issue_title}" \
+          -F body="@${body_file}" \
+          -f 'assignees[]=copilot-swe-agent[bot]' \
+          -f "agent_assignment[target_repo]=${REPO}" \
+          -f "agent_assignment[base_branch]=${BASE_REF}" \
+          -f "agent_assignment[custom_agent]=${AGENT_NAME}" \
+          -f "agent_assignment[custom_instructions]=${custom_instructions}" \
+          --jq '.html_url')"
+
+        echo "Dispatched ${AGENT_NAME} via ${issue_url}"

@@ -338,9 +338,9 @@ messages:
 
       ## Final comment format
 
-      Your final answer should be the PR comment. Use this structure.
+      Your final answer should be the PR comment. Do not wrap it in a Markdown
+      code fence. Use this structure.
 
-      ```markdown
       ## Dependency Update Review
 
       **Verdict:** <Green Low risk / Yellow Caution / Orange High risk / Red Blocking risk / Gray Unknown risk>
@@ -375,7 +375,6 @@ messages:
       - Files reviewed: <relative paths>
       - Upstream context: <PR body / release notes / changelog / compare link / unavailable>
       - Notable uncertainty: <none or short explanation>
-      ```
 
       ## Output calibration
 

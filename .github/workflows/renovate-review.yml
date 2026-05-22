@@ -6,12 +6,29 @@
 #       uses: webgrip/.github/.github/workflows/renovate-review.yml@main
 #       secrets: inherit
 #
-# No secrets required — uses GITHUB_TOKEN only.
-# The prompt is sourced from webgrip/.github; no local copy needed.
+# To use the Copilot agent backend, pass a user token with actions, contents,
+# issues, and pull requests permissions as secrets.COPILOT_AGENT_TOKEN. GitHub
+# documents Copilot issue assignment as requiring a user token. Set review-mode:
+# inference to use the legacy GitHub Models backend with GITHUB_TOKEN only.
 name: Renovate PR Review (reusable)
 
 on:
-  workflow_call: {}
+  workflow_call:
+    inputs:
+      review-mode:
+        description: >
+          Review backend to use: copilot-agent dispatches the org-level
+          renovate-reviewer custom agent; inference uses actions/ai-inference.
+        required: false
+        default: copilot-agent
+        type: string
+    secrets:
+      COPILOT_AGENT_TOKEN:
+        required: false
+
+concurrency:
+  group: renovate-review-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   review:
@@ -20,14 +37,18 @@ jobs:
 
     permissions:
       contents: read        # checkout prompt + fetch diff
-      pull-requests: write  # post comment
-      models: read          # GitHub Models inference
+      issues: write         # create Copilot agent tracking issue
+      pull-requests: write  # post comment in inference mode
+      models: read          # GitHub Models inference fallback
 
     steps:
       - name: Run renovate review
         uses: webgrip/.github/actions/renovate-review@main
         with:
           token: ${{ github.token }}
+          agent-token: ${{ secrets.COPILOT_AGENT_TOKEN }}
+          review-mode: ${{ inputs.review-mode }}
+          base-ref: ${{ github.event.pull_request.base.ref }}
           pr-number: ${{ github.event.pull_request.number }}
           pr-title: ${{ github.event.pull_request.title }}
           pr-author: ${{ github.event.pull_request.user.login }}
