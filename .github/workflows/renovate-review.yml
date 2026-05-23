@@ -7,7 +7,6 @@
 #       secrets: inherit
 #
 # Requires org/repo Actions secret: COPILOT_AGENT_TOKEN
-# (fine-grained PAT with actions, contents, issues, pull-requests permissions)
 name: Renovate PR Review (reusable)
 
 on:
@@ -27,7 +26,7 @@ jobs:
 
     permissions:
       contents: read
-      issues: write
+      issues: write        # create and close tracking issues
       pull-requests: read
 
     steps:

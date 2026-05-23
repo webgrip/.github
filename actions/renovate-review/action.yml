@@ -101,11 +101,9 @@ runs:
             ``,
             `## Your task`,
             ``,
-            `Use the \`${agentName}\` agent instructions to produce a dependency update risk assessment for the pull request linked above.`,
+            `Use the \`${agentName}\` agent instructions to produce a dependency update risk assessment for **PR #${prNumber}** in \`${repo}\`.`,
             ``,
-            `**Do not post to the pull request.** Post your complete review as a **comment on this tracking issue**, then close this issue. A separate automation will relay your comment to the pull request.`,
-            ``,
-            `Do not create branches, commits, or pull requests under any circumstances.`,
+            `Do not create branches, commits, or pull requests. Do not close this tracking issue.`,
             ``,
             `## How to research`,
             ``,
@@ -117,8 +115,11 @@ runs:
             `   - npm, PyPI, crates.io, ArtifactHub, or the project's own changelog/release page`,
             `   - Check ALL versions between old and new, not just the latest`,
             `4. Write the review following the format in the \`${agentName}\` agent profile.`,
-            `5. Post your review with: \`gh issue comment <this-issue-number> --repo ${repo} --body-file review.md\``,
-            `6. Close this issue: \`gh issue close <this-issue-number> --repo ${repo}\``,
+            `5. Post your review as a PR review comment — this is the ONLY write action:`,
+            `   \`\`\``,
+            `   gh pr review ${prNumber} --repo ${repo} --comment --body-file review.md`,
+            `   \`\`\``,
+            `   Use \`gh pr review\` (NOT \`gh pr comment\` or \`gh issue comment\`).`,
             ``,
             `## Initial changed files`,
             ``,
@@ -142,7 +143,7 @@ runs:
           console.log(`Created tracking issue #${issueNumber}`);
 
           // Assign Copilot cloud agent (two-step: create then assign)
-          const customInstructions = `You are the ${agentName} agent. Research the dependency update PR described in this issue. Post your complete review as a comment on this tracking issue (#${issueNumber}), then close this issue. Do NOT post to the PR. Do NOT create branches or pull requests.`;
+          const customInstructions = `You are the ${agentName} agent. Research the dependency update for PR #${prNumber} in ${repo}. Post your complete review using: gh pr review ${prNumber} --repo ${repo} --comment --body-file review.md. Use gh pr review, NOT gh pr comment or gh issue comment. Do NOT create branches or pull requests.`;
 
           await github.request(
             'POST /repos/{owner}/{repo}/issues/{issue_number}/assignees',
