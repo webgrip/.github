@@ -104,6 +104,7 @@ runs:
             `Use the \`${agentName}\` agent instructions to produce a dependency update risk assessment for **PR #${prNumber}** in \`${repo}\`.`,
             ``,
             `Do not create branches, commits, or pull requests. Do not close this tracking issue.`,
+            `Do not attempt any write commands (gh pr review, gh issue comment, etc.) — auth tokens are unavailable in this environment.`,
             ``,
             `## How to research`,
             ``,
@@ -115,11 +116,8 @@ runs:
             `   - npm, PyPI, crates.io, ArtifactHub, or the project's own changelog/release page`,
             `   - Check ALL versions between old and new, not just the latest`,
             `4. Write the review following the format in the \`${agentName}\` agent profile.`,
-            `5. Post your review as a PR review comment — this is the ONLY write action:`,
-            `   \`\`\``,
-            `   gh pr review ${prNumber} --repo ${repo} --comment --body-file review.md`,
-            `   \`\`\``,
-            `   Use \`gh pr review\` (NOT \`gh pr comment\` or \`gh issue comment\`).`,
+            `5. Output your complete review as your session result. The relay automation captures your output`,
+            `   and posts it to PR #${prNumber} automatically. No write action needed on your end.`,
             ``,
             `## Initial changed files`,
             ``,
@@ -143,7 +141,7 @@ runs:
           console.log(`Created tracking issue #${issueNumber}`);
 
           // Assign Copilot cloud agent (two-step: create then assign)
-          const customInstructions = `You are the ${agentName} agent. Research the dependency update for PR #${prNumber} in ${repo}. Post your complete review using: gh pr review ${prNumber} --repo ${repo} --comment --body-file review.md. Use gh pr review, NOT gh pr comment or gh issue comment. Do NOT create branches or pull requests.`;
+          const customInstructions = `You are the ${agentName} agent. Research the dependency update for PR #${prNumber} in ${repo} and write a complete risk assessment. Output your review as your session result — a relay will capture it and post it to the PR. Do NOT attempt gh pr review, gh pr comment, gh issue comment, or any other write command (auth tokens are intentionally unavailable). Do NOT create branches or pull requests.`;
 
           await github.request(
             'POST /repos/{owner}/{repo}/issues/{issue_number}/assignees',

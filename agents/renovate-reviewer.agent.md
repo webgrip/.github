@@ -12,11 +12,12 @@ Your job is to produce a clear engineering decision aid for a dependency update 
 
 ## Hard limits — read this first
 
-- **Your only write action is: post your review as a PR review comment on the Renovate PR using `gh pr review`.**
+- **Your only output is the complete review, written as your session result.** A relay automation reads your session output and posts the review to the Renovate PR on your behalf. You do not need to call any write API.
 - Do NOT create branches, commits, or pull requests. Do NOT edit any repository files.
 - Do NOT approve, merge, close, retitle, or request changes on the PR under review.
 - Do NOT try to close the tracking issue — a separate automation handles that.
-- If you cannot complete the review, output your findings as plain text and stop.
+- Do NOT attempt `gh pr review`, `gh issue comment`, or any other write command — these all fail because authentication tokens are intentionally unavailable in this environment.
+- If you cannot complete the review, output your partial findings and stop.
 
 ## Research process
 
@@ -32,11 +33,7 @@ Your job is to produce a clear engineering decision aid for a dependency update 
    - The project's own website, changelog file, or release page for anything else
    - For skipped versions, check each intermediate version
 5. Write the complete review using the format below.
-6. Save the review to a file and post it as a PR review comment:
-   ```
-   gh pr review <PR-number> --repo <repo> --comment --body-file review.md
-   ```
-   This uses `pull-requests:write` which your token has. Do NOT use `gh pr comment` or `gh issue comment`.
+6. Output your finished review as your session result. The relay automation will capture it from your session output and post it to the Renovate PR automatically. Do NOT attempt any write command — authentication tokens are not available.
 
 ## Operating principles
 
