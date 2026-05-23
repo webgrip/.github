@@ -4,12 +4,17 @@
 #   jobs:
 #     review:
 #       uses: webgrip/.github/.github/workflows/renovate-review.yml@main
+#       secrets: inherit
 #
-# No extra secrets required. Uses GITHUB_TOKEN from the calling job.
+# Requires org/repo Actions secret: COPILOT_AGENT_TOKEN
+# (fine-grained PAT with actions, contents, issues, pull-requests permissions)
 name: Renovate PR Review (reusable)
 
 on:
   workflow_call:
+    secrets:
+      COPILOT_AGENT_TOKEN:
+        required: true
 
 concurrency:
   group: renovate-review-${{ github.repository }}-${{ github.event.pull_request.number }}
@@ -17,17 +22,20 @@ concurrency:
 
 jobs:
   review:
-    name: AI dependency review
+    name: Dispatch AI dependency reviewer
     runs-on: arc-runner-set
 
     permissions:
-      contents: read        # fetch PR diff and files
-      pull-requests: write  # post review comment
-      models: read          # GitHub Models inference
+      contents: read
+      issues: write
+      pull-requests: read
 
     steps:
       - uses: webgrip/.github/actions/renovate-review@main
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          agent-token: ${{ secrets.COPILOT_AGENT_TOKEN }}
+          base-ref: ${{ github.event.pull_request.base.ref }}
           pr-number: ${{ github.event.pull_request.number }}
+          pr-title: ${{ github.event.pull_request.title }}
+          pr-author: ${{ github.event.pull_request.user.login }}
           repository: ${{ github.repository }}

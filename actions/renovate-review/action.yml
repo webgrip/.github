@@ -1,275 +1,145 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-action.json
 name: Renovate AI Review
 description: >
-  Reviews dependency update pull requests: fetches live diff, upstream release
-  notes, and in-repo usage, then calls GitHub Models to produce a risk
-  assessment comment on the PR.
+  Creates a tracking issue and assigns the renovate-reviewer Copilot cloud agent.
+  The agent researches the PR and posts its review as a comment on the tracking
+  issue. A separate publish workflow relays that comment to the Renovate PR.
 
 inputs:
-  github-token:
+  agent-token:
     description: >
-      Token with pull-requests:write and models:read permissions.
-      Use the job GITHUB_TOKEN.
+      User token used to assign Copilot cloud agent (requires actions, contents,
+      issues, and pull-requests permissions).
     required: true
+  agent-name:
+    description: Custom Copilot agent profile name to use.
+    required: false
+    default: renovate-reviewer
+  base-ref:
+    description: Pull request base branch for Copilot agent assignment.
+    required: false
+    default: main
   pr-number:
-    description: Pull request number to review.
+    description: Pull request number.
+    required: true
+  pr-title:
+    description: Pull request title.
+    required: true
+  pr-author:
+    description: GitHub login of the PR author.
     required: true
   repository:
     description: Repository in owner/name format.
     required: true
-  model:
-    description: GitHub Models model ID to use.
-    required: false
-    default: openai/gpt-4.1
 
 runs:
   using: composite
   steps:
-    - name: Fetch context, call model, post comment
+    - name: Dispatch Copilot renovate reviewer
       shell: bash
       env:
-        GH_TOKEN: ${{ inputs.github-token }}
+        AGENT_TOKEN: ${{ inputs.agent-token }}
         PR_NUMBER: ${{ inputs.pr-number }}
+        PR_TITLE: ${{ inputs.pr-title }}
+        PR_AUTHOR: ${{ inputs.pr-author }}
         REPO: ${{ inputs.repository }}
-        MODEL: ${{ inputs.model }}
-        SENTINEL: "<!-- renovate-ai-review -->"
+        BASE_REF: ${{ inputs.base-ref }}
+        AGENT_NAME: ${{ inputs.agent-name }}
       run: |
         set -euo pipefail
+        : "${AGENT_TOKEN:?missing agent-token input}"
+        export GH_TOKEN="${AGENT_TOKEN}"
 
-        # ── 1. Live PR metadata ────────────────────────────────────────────────
-        pr_json=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}")
-        pr_url=$(   echo "${pr_json}" | jq -r '.html_url')
-        pr_title=$( echo "${pr_json}" | jq -r '.title')
-        pr_author=$(echo "${pr_json}" | jq -r '.user.login')
-        pr_labels=$(echo "${pr_json}" | jq -r '[.labels[].name] | join(", ")')
-        # Full PR body — Renovate populates this with changelog excerpts and links
-        pr_body=$(echo "${pr_json}" | jq -r '.body // ""')
+        marker="renovate-agent-review:${REPO}#${PR_NUMBER}"
+        pr_url="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" --jq '.html_url')"
+        pr_body="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" --jq '.body // "_No PR body._"' | head -c 3000)"
+        files="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files" \
+          --jq '.[] | "- `\(.filename)` (+\(.additions) -\(.deletions))"' \
+          | head -50)"
 
-        changed_files=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files" \
-          --jq '.[:80] | .[] | "- `\(.filename)` +\(.additions)/-\(.deletions) [\(.status)]"')
-
-        diff=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" \
-          -H "Accept: application/vnd.github.v3.diff" 2>/dev/null \
-          | head -c 10000 || echo "(diff unavailable)")
-
-        # ── 2. Parse dependency name and version range from PR title ───────────
-        # Renovate titles: "feat(container): update image mariadb ( 11.4 ➔ 11.7 )"
-        # Dependabot titles: "Bump lodash from 4.17.20 to 4.17.21"
-        dep_name=""
-        ver_from=""
-        ver_to=""
-
-        if echo "${pr_title}" | grep -qiE 'update image|update.*container'; then
-          dep_name=$(echo "${pr_title}" | grep -oiP '(?<=image\s)[\w./:-]+(?=\s)' | head -1 || true)
-        fi
-        if [ -z "${dep_name}" ]; then
-          dep_name=$(echo "${pr_title}" | grep -oiP '(?:update|bump|upgrade)\s+\K[\w./@:-]+' | head -1 || true)
+        # Close any stale tracking issues for this PR
+        stale_issues="$(gh api --method GET /search/issues \
+          -f q="repo:${REPO} is:issue is:open \"${marker}\"" \
+          --jq '.items[].number' 2>/dev/null || true)"
+        if [ -n "${stale_issues}" ]; then
+          while IFS= read -r n; do
+            [ -z "${n}" ] && continue
+            gh issue close "${n}" --repo "${REPO}" \
+              --comment "Superseded by a newer review dispatch." 2>/dev/null || true
+          done <<< "${stale_issues}"
         fi
 
-        # Match versions: "11.4 ➔ 11.7" or "from 4.17.20 to 4.17.21"
-        ver_from=$(echo "${pr_title}" | grep -oP '[\d]+\.[\d]+(?:\.[\d]+)?(?:-[^)\s]+)?\s*(?:➔|→|->|to)\s*\K' | head -1 \
-          || echo "${pr_title}" | grep -oP '(?:from\s)\K[\d]+\.[\d]+(?:\.[\d]+)?' | head -1 || true)
-        ver_to=$(echo "${pr_title}" | grep -oP '(?:➔|→|->|to)\s*\K[\d]+\.[\d]+(?:\.[\d]+)?(?:-[^)\s]+)?' | head -1 || true)
+        body_file="$(mktemp)"
+        trap "rm -f '${body_file}'" EXIT
 
-        echo "Detected: dep='${dep_name}' from='${ver_from}' to='${ver_to}'"
+        cat > "${body_file}" << EOF
+# Renovate dependency review task
 
-        # ── 3. Fetch upstream release notes ───────────────────────────────────
-        release_notes=""
+Marker: \`${marker}\`
 
-        fetch_url() {
-          local url="$1" max_bytes="${2:-6000}"
-          # For GitHub API URLs use gh; for everything else use curl
-          if echo "${url}" | grep -q 'api\.github\.com'; then
-            gh api "${url#https://api.github.com}" 2>/dev/null || true
-          else
-            curl -sfL --max-time 10 --max-filesize 200000 \
-              -H "Accept: text/html,application/json,text/plain" \
-              "${url}" 2>/dev/null | head -c "${max_bytes}" || true
-          fi
-        }
+Review pull request: ${pr_url}
+Repository: \`${REPO}\`
+Pull request number: ${PR_NUMBER}
+Title: ${PR_TITLE}
+Author: @${PR_AUTHOR}
+Base branch: \`${BASE_REF}\`
 
-        # 3a. Extract GitHub release/compare/changelog URLs from the PR body
-        gh_release_urls=$(echo "${pr_body}" \
-          | grep -oP 'https://github\.com/[^)\s"]+/releases/tag/[^\s)"]+' \
-          | sort -u | head -10 || true)
-        gh_compare_urls=$(echo "${pr_body}" \
-          | grep -oP 'https://github\.com/[^)\s"]+/compare/[^\s)"]+' \
-          | sort -u | head -5 || true)
-        other_changelog_urls=$(echo "${pr_body}" \
-          | grep -oP 'https?://[^\s)"]+(?:CHANGELOG|changelog|releases|release-notes|history)[^\s)"]*' \
-          | grep -v 'github\.com/[^/]*/[^/]*/releases/tag' \
-          | sort -u | head -5 || true)
+## Your task
 
-        # 3b. Fetch GitHub release notes (structured: tag + body)
-        if [ -n "${gh_release_urls}" ]; then
-          while IFS= read -r url; do
-            [ -z "${url}" ] && continue
-            # Convert html URL to API URL: github.com/{owner}/{repo}/releases/tag/{tag}
-            api_path=$(echo "${url}" | sed 's|https://github\.com/|/repos/|;s|/releases/tag/|/releases/tags/|')
-            rn=$(gh api "${api_path}" --jq '"## Release: \(.tag_name)\n\(.body // "(no release notes)")"' 2>/dev/null | head -c 3000 || true)
-            if [ -n "${rn}" ]; then
-              release_notes="${release_notes}
+Use the \`${AGENT_NAME}\` agent instructions to produce a dependency update risk assessment for the pull request linked above.
 
-${rn}"
-            fi
-          done <<< "${gh_release_urls}"
-        fi
+**Do not post to the pull request.** Post your complete review as a **comment on this tracking issue**, then close this issue. A separate automation will relay your comment to the pull request.
 
-        # 3c. Fetch changelog/compare pages for other URLs
-        for url in ${gh_compare_urls} ${other_changelog_urls}; do
-          content=$(fetch_url "${url}" 3000)
-          if [ -n "${content}" ]; then
-            release_notes="${release_notes}
+Do not create branches, commits, or pull requests under any circumstances.
 
-### From: ${url}
-${content}"
-          fi
-        done
+## How to research
 
-        # 3d. Fallback: if dep name and versions found, try GitHub releases API directly
-        # (works for many projects hosted on GitHub, e.g. docker.io/library/* maps to official repos)
-        if [ -z "${release_notes}" ] && [ -n "${dep_name}" ] && [ -n "${ver_to}" ]; then
-          # Try common GitHub org patterns for well-known images
-          declare -A known_repos=(
-            ["mariadb"]="MariaDB/server"
-            ["postgres"]="postgres/postgres"
-            ["redis"]="redis/redis"
-            ["nginx"]="nginx/nginx"
-            ["traefik"]="traefik/traefik"
-            ["valkey"]="valkey-io/valkey"
-            ["alpine"]="alpinelinux/aports"
-          )
-          gh_repo="${known_repos[${dep_name}]:-}"
-          if [ -n "${gh_repo}" ]; then
-            rn=$(gh api "/repos/${gh_repo}/releases" \
-              --jq '.[:10] | .[] | "## \(.tag_name)\n\(.body // "(no notes)")"' 2>/dev/null \
-              | head -c 4000 || true)
-            [ -n "${rn}" ] && release_notes="${rn}"
-          fi
-        fi
+1. Fetch live PR metadata, diff, and changed files via \`gh api\` or the \`github/*\` tools.
+2. Read relevant repository files — find every place this dependency is used.
+3. Look up upstream release notes. Use \`execute\` to \`curl\` wherever the info lives:
+   - GitHub releases API for GitHub-hosted projects
+   - Docker Hub API (\`https://hub.docker.com/v2/repositories/<image>/tags\`) for container images
+   - npm, PyPI, crates.io, ArtifactHub, or the project's own changelog/release page
+   - Check ALL versions between old and new, not just the latest
+4. Write the review following the format in the \`${AGENT_NAME}\` agent profile.
+5. Post your review with: \`gh issue comment <this-issue-number> --repo ${REPO} --body "..."\`
+6. Close this issue: \`gh issue close <this-issue-number> --repo ${REPO}\`
 
-        # Trim release notes total size
-        release_notes=$(echo "${release_notes}" | head -c 8000)
+## Initial changed files
 
-        # ── 4. Find in-repo usage of the dependency ───────────────────────────
-        repo_usage=""
-        if [ -n "${dep_name}" ]; then
-          # Get file paths from the changed files list
-          changed_paths=$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files" \
-            --jq '.[].filename' | head -20)
+${files}
 
-          # Also search repo for files referencing the dep name (code search)
-          usage_files=$(gh api \
-            "https://api.github.com/search/code?q=${dep_name}+repo:${REPO}&per_page=10" \
-            --jq '.items[].path' 2>/dev/null | head -10 || true)
+## Renovate PR body (contains changelog links — follow them)
 
-          all_relevant=$(printf '%s\n%s' "${changed_paths}" "${usage_files}" \
-            | sort -u | grep -vE '\.(png|jpg|gif|ico|woff|ttf|lock)$' | head -20)
-
-          while IFS= read -r fpath; do
-            [ -z "${fpath}" ] && continue
-            content=$(gh api "/repos/${REPO}/contents/${fpath}" \
-              --jq '.content' 2>/dev/null \
-              | base64 -d 2>/dev/null | head -c 1500 || true)
-            if [ -n "${content}" ]; then
-              repo_usage="${repo_usage}
-### \`${fpath}\`
-\`\`\`
-${content}
-\`\`\`"
-            fi
-          done <<< "${all_relevant}"
-
-          repo_usage=$(echo "${repo_usage}" | head -c 6000)
-        fi
-
-        # ── 5. Build prompt and call GitHub Models ─────────────────────────────
-        has_release_notes="yes"
-        [ -z "${release_notes}" ] && has_release_notes="no — could not fetch any upstream release notes; rely only on the diff and PR body"
-
-        user_prompt="## PR: ${pr_title}
-Repository: \`${REPO}\`  |  PR #${PR_NUMBER}
-Author: @${pr_author}  |  Labels: ${pr_labels:-none}
-URL: ${pr_url}
-
-## Changed files
-${changed_files}
-
-## Diff (first 10 KB)
-\`\`\`diff
-${diff}
-\`\`\`
-
-## Renovate PR body (contains changelog excerpts)
 ${pr_body}
+EOF
 
-## Upstream release notes (fetched live — ${has_release_notes})
-${release_notes:-_(none fetched)_}
-
-## In-repo usage of \`${dep_name:-this dependency}\`
-${repo_usage:-_(not found or dep name could not be parsed)_}
-
----
-Based on the above live context, produce a dependency update risk assessment:
-
-**Verdict:** 🟢 Green / 🟡 Yellow Caution / 🔴 Red Block
-**Recommendation:** Merge / Merge after checks / Do not merge
-**Confidence:** High / Medium / Low
-
-### What changed
-Dependency, old → new version, update type (patch/minor/major/digest).
-
-### Upstream changes
-Breaking changes, deprecations, security fixes, and notable improvements found in the release notes above. Cite specific versions/tags. If no release notes were fetched, say so explicitly.
-
-### Local impact
-How this dependency is used in this specific repository (based on the files above). Which services, workloads, or workflows are affected.
-
-### Pre-merge checks
-Specific, actionable steps the reviewer should verify before merging.
-
-### Risk rationale
-Why you assigned the verdict above, grounded in what you actually found."
-
-        payload=$(jq -n \
-          --arg model  "${MODEL}" \
-          --arg system "You are a supply-chain risk assessor for dependency update pull requests. Be concise, factual, and grounded in the provided context. Do not fabricate CVEs, release notes, or compatibility claims. If information is missing, say so." \
-          --arg user   "${user_prompt}" \
-          '{
-            model: $model,
-            messages: [
-              {role: "system", content: $system},
-              {role: "user",   content: $user}
-            ],
-            max_tokens: 2000
-          }')
-
-        response=$(curl -sf \
-          -H "Authorization: Bearer ${GH_TOKEN}" \
-          -H "Content-Type: application/json" \
-          "https://models.inference.ai.azure.com/chat/completions" \
-          -d "${payload}")
-
-        review=$(echo "${response}" | jq -r '.choices[0].message.content // empty')
-
-        if [ -z "${review}" ]; then
-          echo "::error::Models API returned no content: $(echo "${response}" | jq -c .)"
-          exit 1
+        issue_title="Renovate agent review for #${PR_NUMBER}: ${PR_TITLE}"
+        if [ "${#issue_title}" -gt 240 ]; then
+          issue_title="${issue_title:0:237}..."
         fi
 
-        # ── 6. Post or update the PR comment ──────────────────────────────────
-        comment_body="${SENTINEL}
-${review}"
+        issue_number="$(gh api \
+          --method POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "/repos/${REPO}/issues" \
+          -f title="${issue_title}" \
+          -F body="@${body_file}" \
+          --jq '.number')"
 
-        existing_id=$(gh api "/repos/${REPO}/issues/${PR_NUMBER}/comments" \
-          --jq "[.[] | select(.body | startswith(\"${SENTINEL}\"))][0].id // empty")
+        custom_instructions="You are the ${AGENT_NAME} agent. Research the dependency update PR described in this issue. Post your complete review as a comment on this tracking issue (#${issue_number}), then close this issue. Do NOT post to the PR. Do NOT create branches or pull requests."
 
-        if [ -n "${existing_id}" ]; then
-          gh api --method PATCH \
-            "/repos/${REPO}/issues/comments/${existing_id}" \
-            -f body="${comment_body}" --silent
-          echo "Updated review comment (ID ${existing_id}) on ${pr_url}"
-        else
-          gh pr comment "${PR_NUMBER}" --repo "${REPO}" --body "${comment_body}"
-          echo "Posted review comment on ${pr_url}"
-        fi
+        gh api \
+          --method POST \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          "/repos/${REPO}/issues/${issue_number}/assignees" \
+          -f 'assignees[]=copilot-swe-agent[bot]' \
+          -f "agent_assignment[target_repo]=${REPO}" \
+          -f "agent_assignment[base_branch]=${BASE_REF}" \
+          -f "agent_assignment[custom_agent]=${AGENT_NAME}" \
+          -f "agent_assignment[custom_instructions]=${custom_instructions}" \
+          --silent
+
+        echo "Dispatched ${AGENT_NAME} → https://github.com/${REPO}/issues/${issue_number}"
