@@ -2,8 +2,9 @@
 name: Renovate AI Review
 description: >
   Creates a tracking issue and assigns the renovate-reviewer Copilot cloud agent.
-  The agent researches the PR and posts its review as a comment on the tracking
-  issue. A separate publish workflow relays that comment to the Renovate PR.
+  The agent researches the PR, writes its review to .copilot-review/result.md,
+  and commits it. A push-triggered relay workflow reads the file and posts the
+  comment to the Renovate PR.
 
 inputs:
   agent-token:
@@ -103,9 +104,6 @@ runs:
             ``,
             `Use the \`${agentName}\` agent instructions to produce a dependency update risk assessment for **PR #${prNumber}** in \`${repo}\`.`,
             ``,
-            `Do not create branches, commits, or pull requests. Do not close this tracking issue.`,
-            `Do not attempt any write commands (gh pr review, gh issue comment, etc.) — auth tokens are unavailable in this environment.`,
-            ``,
             `## How to research`,
             ``,
             `1. Fetch live PR metadata, diff, and changed files via \`gh api\` or the \`github/*\` tools.`,
@@ -116,8 +114,25 @@ runs:
             `   - npm, PyPI, crates.io, ArtifactHub, or the project's own changelog/release page`,
             `   - Check ALL versions between old and new, not just the latest`,
             `4. Write the review following the format in the \`${agentName}\` agent profile.`,
-            `5. Output your complete review as your session result. The relay automation captures your output`,
-            `   and posts it to PR #${prNumber} automatically. No write action needed on your end.`,
+            ``,
+            `## How to deliver the review`,
+            ``,
+            `Auth tokens are stripped from this environment, so API write calls fail.`,
+            `However, **git push works** (uses the integration credential). Deliver your review like this:`,
+            ``,
+            `1. Write the completed review to \`.copilot-review/result.md\` with this exact format:`,
+            `   \`\`\``,
+            `   pr: ${prNumber}`,
+            ``,
+            `   <full review body>`,
+            `   \`\`\``,
+            `2. Commit and push:`,
+            `   \`\`\``,
+            `   git add .copilot-review/result.md`,
+            `   git commit -m "copilot-review: PR #${prNumber}"`,
+            `   git push`,
+            `   \`\`\``,
+            `3. A relay workflow will detect the push, read the file, and post the comment to PR #${prNumber}.`,
             ``,
             `## Initial changed files`,
             ``,
@@ -140,8 +155,21 @@ runs:
           const issueNumber = issue.number;
           console.log(`Created tracking issue #${issueNumber}`);
 
-          // Assign Copilot cloud agent (two-step: create then assign)
-          const customInstructions = `You are the ${agentName} agent. Research the dependency update for PR #${prNumber} in ${repo} and write a complete risk assessment. Output your review as your session result — a relay will capture it and post it to the PR. Do NOT attempt gh pr review, gh pr comment, gh issue comment, or any other write command (auth tokens are intentionally unavailable). Do NOT create branches or pull requests.`;
+          // Assign Copilot cloud agent
+          const customInstructions = [
+            `You are the ${agentName} agent. Research the dependency update for PR #${prNumber} in ${repo} and write a complete risk assessment.`,
+            ``,
+            `Auth tokens are stripped from this environment — do NOT attempt gh pr review, gh pr comment, gh issue comment, or any other write API command.`,
+            ``,
+            `Deliver your review by writing it to .copilot-review/result.md and committing it:`,
+            `  1. First line: "pr: ${prNumber}"`,
+            `  2. Blank line`,
+            `  3. Full review body (see agent profile for format)`,
+            `Then: git add .copilot-review/result.md && git commit -m "copilot-review: PR #${prNumber}" && git push`,
+            ``,
+            `A relay workflow will pick up the committed file and post the comment to PR #${prNumber} automatically.`,
+            `Do NOT create additional branches or pull requests.`,
+          ].join('\n');
 
           await github.request(
             'POST /repos/{owner}/{repo}/issues/{issue_number}/assignees',
