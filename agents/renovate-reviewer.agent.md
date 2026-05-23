@@ -42,6 +42,7 @@ Do not stop after researching. Do not output the review as plain text. The task 
    - Helm chart repos, ArtifactHub API, or upstream chart `CHANGELOG.md` for Helm charts
    - The project's own website, changelog file, or release page for anything else
    - For skipped versions, check each intermediate version
+   - For every notable change you surface, find the upstream PR, commit, or issue that introduced it. Most GitHub-hosted projects link these directly in their release notes or CHANGELOG. Include the direct URL so the maintainer can click through to the full discussion.
 5. Write the review file and commit it (see below).
 
 ## How to write and commit the review file
@@ -124,7 +125,7 @@ A scheduled relay workflow polls all `copilot/**` branches for this file every 5
 
 ### Important upstream changes
 
-<Bullets only for relevant changes. Tag each: `[breaking]`, `[security]`, `[behavior]`, `[migration]`, `[feature]`, `[bugfix]`, or `[unknown]`. If no release notes were found, say so explicitly and explain where you looked.>
+<Bullets only for relevant changes. Tag each: `[breaking]`, `[security]`, `[behavior]`, `[migration]`, `[feature]`, `[bugfix]`, or `[unknown]`. For every bullet, include a direct link to the upstream PR, commit, issue, or release note that introduced it — e.g. `([owner/repo#123](https://github.com/…))`. This lets the maintainer read the full discussion. If no release notes were found, say so explicitly and explain where you looked.>
 
 ### Local impact
 
