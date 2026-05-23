@@ -35,111 +35,130 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Dispatch Copilot renovate reviewer
-      shell: bash
+    - name: Create tracking issue and dispatch Copilot reviewer
+      uses: actions/github-script@v7
       env:
         AGENT_TOKEN: ${{ inputs.agent-token }}
+        AGENT_NAME: ${{ inputs.agent-name }}
+        BASE_REF: ${{ inputs.base-ref }}
         PR_NUMBER: ${{ inputs.pr-number }}
         PR_TITLE: ${{ inputs.pr-title }}
         PR_AUTHOR: ${{ inputs.pr-author }}
         REPO: ${{ inputs.repository }}
-        BASE_REF: ${{ inputs.base-ref }}
-        AGENT_NAME: ${{ inputs.agent-name }}
-      run: |
-        set -euo pipefail
-        : "${AGENT_TOKEN:?missing agent-token input}"
-        export GH_TOKEN="${AGENT_TOKEN}"
+      with:
+        github-token: ${{ inputs.agent-token }}
+        script: |
+          const [repoOwner, repoName] = process.env.REPO.split('/');
+          const prNumber  = Number(process.env.PR_NUMBER);
+          const prTitle   = process.env.PR_TITLE;
+          const prAuthor  = process.env.PR_AUTHOR;
+          const baseRef   = process.env.BASE_REF;
+          const agentName = process.env.AGENT_NAME;
+          const repo      = process.env.REPO;
 
-        marker="renovate-agent-review:${REPO}#${PR_NUMBER}"
-        pr_url="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" --jq '.html_url')"
-        pr_body="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}" --jq '.body // "_No PR body._"' | head -c 3000)"
-        files="$(gh api "/repos/${REPO}/pulls/${PR_NUMBER}/files" \
-          --jq '.[] | "- `\(.filename)` (+\(.additions) -\(.deletions))"' \
-          | head -50)"
+          // Fetch PR context
+          const { data: pr } = await github.rest.pulls.get({
+            owner: repoOwner, repo: repoName, pull_number: prNumber,
+          });
+          const prUrl  = pr.html_url;
+          const prBody = (pr.body || '_No PR body._').slice(0, 3000);
 
-        # Close any stale tracking issues for this PR
-        stale_issues="$(gh api --method GET /search/issues \
-          -f q="repo:${REPO} is:issue is:open \"${marker}\"" \
-          --jq '.items[].number' 2>/dev/null || true)"
-        if [ -n "${stale_issues}" ]; then
-          while IFS= read -r n; do
-            [ -z "${n}" ] && continue
-            gh issue close "${n}" --repo "${REPO}" \
-              --comment "Superseded by a newer review dispatch." 2>/dev/null || true
-          done <<< "${stale_issues}"
-        fi
+          const { data: prFiles } = await github.rest.pulls.listFiles({
+            owner: repoOwner, repo: repoName, pull_number: prNumber, per_page: 80,
+          });
+          const filesList = prFiles
+            .map(f => `- \`${f.filename}\` (+${f.additions}/-${f.deletions})`)
+            .join('\n');
 
-        body_file="$(mktemp)"
-        trap "rm -f '${body_file}'" EXIT
+          // Close stale tracking issues for this PR
+          const marker = `renovate-agent-review:${repo}#${prNumber}`;
+          const stale = await github.rest.search.issuesAndPullRequests({
+            q: `repo:${repo} is:issue is:open "${marker}"`,
+          });
+          for (const issue of stale.data.items) {
+            await github.rest.issues.createComment({
+              owner: repoOwner, repo: repoName, issue_number: issue.number,
+              body: 'Superseded by a newer review dispatch.',
+            });
+            await github.rest.issues.update({
+              owner: repoOwner, repo: repoName, issue_number: issue.number,
+              state: 'closed',
+            });
+          }
 
-        cat > "${body_file}" << EOF
-# Renovate dependency review task
+          // Build issue body
+          const body = [
+            `# Renovate dependency review task`,
+            ``,
+            `Marker: \`${marker}\``,
+            ``,
+            `Review pull request: ${prUrl}`,
+            `Repository: \`${repo}\``,
+            `Pull request number: ${prNumber}`,
+            `Title: ${prTitle}`,
+            `Author: @${prAuthor}`,
+            `Base branch: \`${baseRef}\``,
+            ``,
+            `## Your task`,
+            ``,
+            `Use the \`${agentName}\` agent instructions to produce a dependency update risk assessment for the pull request linked above.`,
+            ``,
+            `**Do not post to the pull request.** Post your complete review as a **comment on this tracking issue**, then close this issue. A separate automation will relay your comment to the pull request.`,
+            ``,
+            `Do not create branches, commits, or pull requests under any circumstances.`,
+            ``,
+            `## How to research`,
+            ``,
+            `1. Fetch live PR metadata, diff, and changed files via \`gh api\` or the \`github/*\` tools.`,
+            `2. Read relevant repository files — find every place this dependency is used.`,
+            `3. Look up upstream release notes. Use \`execute\` to \`curl\` wherever the info lives:`,
+            `   - GitHub releases API for GitHub-hosted projects`,
+            `   - Docker Hub API (\`https://hub.docker.com/v2/repositories/<image>/tags\`) for container images`,
+            `   - npm, PyPI, crates.io, ArtifactHub, or the project's own changelog/release page`,
+            `   - Check ALL versions between old and new, not just the latest`,
+            `4. Write the review following the format in the \`${agentName}\` agent profile.`,
+            `5. Post your review with: \`gh issue comment <this-issue-number> --repo ${repo} --body-file review.md\``,
+            `6. Close this issue: \`gh issue close <this-issue-number> --repo ${repo}\``,
+            ``,
+            `## Initial changed files`,
+            ``,
+            filesList,
+            ``,
+            `## Renovate PR body (contains changelog links — follow them)`,
+            ``,
+            prBody,
+          ].join('\n');
 
-Marker: \`${marker}\`
+          // Create tracking issue
+          let issueTitle = `Renovate agent review for #${prNumber}: ${prTitle}`;
+          if (issueTitle.length > 240) issueTitle = issueTitle.slice(0, 237) + '...';
 
-Review pull request: ${pr_url}
-Repository: \`${REPO}\`
-Pull request number: ${PR_NUMBER}
-Title: ${PR_TITLE}
-Author: @${PR_AUTHOR}
-Base branch: \`${BASE_REF}\`
+          const { data: issue } = await github.rest.issues.create({
+            owner: repoOwner, repo: repoName,
+            title: issueTitle,
+            body,
+          });
+          const issueNumber = issue.number;
+          console.log(`Created tracking issue #${issueNumber}`);
 
-## Your task
+          // Assign Copilot cloud agent (two-step: create then assign)
+          const customInstructions = `You are the ${agentName} agent. Research the dependency update PR described in this issue. Post your complete review as a comment on this tracking issue (#${issueNumber}), then close this issue. Do NOT post to the PR. Do NOT create branches or pull requests.`;
 
-Use the \`${AGENT_NAME}\` agent instructions to produce a dependency update risk assessment for the pull request linked above.
+          await github.request(
+            'POST /repos/{owner}/{repo}/issues/{issue_number}/assignees',
+            {
+              owner: repoOwner,
+              repo: repoName,
+              issue_number: issueNumber,
+              assignees: ['copilot-swe-agent[bot]'],
+              agent_assignment: {
+                target_repo: repo,
+                base_branch: baseRef,
+                custom_agent: agentName,
+                custom_instructions: customInstructions,
+              },
+              headers: { 'X-GitHub-Api-Version': '2022-11-28' },
+            }
+          );
 
-**Do not post to the pull request.** Post your complete review as a **comment on this tracking issue**, then close this issue. A separate automation will relay your comment to the pull request.
-
-Do not create branches, commits, or pull requests under any circumstances.
-
-## How to research
-
-1. Fetch live PR metadata, diff, and changed files via \`gh api\` or the \`github/*\` tools.
-2. Read relevant repository files — find every place this dependency is used.
-3. Look up upstream release notes. Use \`execute\` to \`curl\` wherever the info lives:
-   - GitHub releases API for GitHub-hosted projects
-   - Docker Hub API (\`https://hub.docker.com/v2/repositories/<image>/tags\`) for container images
-   - npm, PyPI, crates.io, ArtifactHub, or the project's own changelog/release page
-   - Check ALL versions between old and new, not just the latest
-4. Write the review following the format in the \`${AGENT_NAME}\` agent profile.
-5. Post your review with: \`gh issue comment <this-issue-number> --repo ${REPO} --body "..."\`
-6. Close this issue: \`gh issue close <this-issue-number> --repo ${REPO}\`
-
-## Initial changed files
-
-${files}
-
-## Renovate PR body (contains changelog links — follow them)
-
-${pr_body}
-EOF
-
-        issue_title="Renovate agent review for #${PR_NUMBER}: ${PR_TITLE}"
-        if [ "${#issue_title}" -gt 240 ]; then
-          issue_title="${issue_title:0:237}..."
-        fi
-
-        issue_number="$(gh api \
-          --method POST \
-          -H "Accept: application/vnd.github+json" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          "/repos/${REPO}/issues" \
-          -f title="${issue_title}" \
-          -F body="@${body_file}" \
-          --jq '.number')"
-
-        custom_instructions="You are the ${AGENT_NAME} agent. Research the dependency update PR described in this issue. Post your complete review as a comment on this tracking issue (#${issue_number}), then close this issue. Do NOT post to the PR. Do NOT create branches or pull requests."
-
-        gh api \
-          --method POST \
-          -H "Accept: application/vnd.github+json" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          "/repos/${REPO}/issues/${issue_number}/assignees" \
-          -f 'assignees[]=copilot-swe-agent[bot]' \
-          -f "agent_assignment[target_repo]=${REPO}" \
-          -f "agent_assignment[base_branch]=${BASE_REF}" \
-          -f "agent_assignment[custom_agent]=${AGENT_NAME}" \
-          -f "agent_assignment[custom_instructions]=${custom_instructions}" \
-          --silent
-
-        echo "Dispatched ${AGENT_NAME} → https://github.com/${REPO}/issues/${issue_number}"
+          console.log(`Dispatched ${agentName} → ${issue.html_url}`);
