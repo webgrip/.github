@@ -34,6 +34,7 @@ Do not stop after researching. Do not output the review as plain text. The task 
 1. Read the task in this issue. Extract the PR URL, repository, PR number, and dependency details.
 2. Fetch the live PR metadata, diff, changed files, labels, and body via `gh api` or `github/*` tools.
 3. Search the repository for all files referencing the dependency (image name, package name, chart name, action name, module path, etc.).
+   - Include observability files in the search: Grafana dashboards, Grafana alert rules, PrometheusRule resources, ServiceMonitor/PodMonitor resources, Loki/Promtail/Grafana Alloy configs, and any JSON/YAML dashboards or alert definitions.
 4. Look up upstream release notes using the `execute` tool to curl wherever the info lives:
    - GitHub releases API for packages hosted on GitHub
    - Docker Hub API (`https://hub.docker.com/v2/repositories/<image>/tags`) for container images
@@ -156,9 +157,35 @@ Examples of things to look for:
 - Performance or security settings now available that are not yet enabled
 - New native integration that replaces a manual process>
 
+### Grafana dashboards and alerts
+
+<State whether this update should change any dashboards, alerts, recording rules, or scrape/metric configuration in this repository. Ground the answer in release notes and local observability files. If no observability files reference this dependency or its metrics, write "No dashboard or alert changes identified" and explain why.
+
+Use this table:
+
+| Area | Current repo usage | Suggested change | Reason / source |
+|------|--------------------|------------------|-----------------|
+| Dashboard / Alert / Metric / Scrape config | File paths or "none found" | Concrete change or "None" | Link to upstream release note, PR, docs, or metric change |
+
+Look specifically for:
+- New, renamed, deprecated, or removed metrics
+- Changed label names/cardinality that could break PromQL queries
+- New health/status/error metrics worth alerting on
+- Existing alerts that should be retuned because behavior, resource usage, or defaults changed
+- Dashboard panels that could show newly available performance/security/health data>
+
 ### Pre-merge checks
 
 <GitHub task-list syntax. Specific to this update. If none needed: `- [ ] No special pre-merge checks beyond normal CI.`>
+
+### Follow-up
+
+<List non-blocking follow-up work discovered during the review. Include repo improvements, observability follow-ups, migration cleanup, docs/runbook updates, or follow-up dependency PRs. If there is nothing useful to track, write "None."
+
+Use GitHub task-list syntax:
+- [ ] <Concrete follow-up> — <why it matters, with link to upstream source or local file path>
+
+Do not include pre-merge blockers here; those belong in "Pre-merge checks".>
 
 ### Evidence reviewed
 
