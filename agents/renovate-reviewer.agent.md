@@ -142,6 +142,20 @@ If no release notes were found, say so explicitly and explain where you looked.
 
 <How this dependency is used in this repository. Reference specific files found. Cover state, privilege, exposure, rollback difficulty.>
 
+### Improvement opportunities
+
+<Based on the new features, config options, performance improvements, and deprecation notices in this release range, suggest concrete improvements the maintainer could make to this repository. Ground every suggestion in something you actually found in the release notes or upstream source — do not speculate. If nothing actionable was found, write "None identified."
+
+Format as a bullet list:
+- **`<what to change>`** — <why it's worth doing, which upstream change enables/recommends it, link to relevant release note or docs>
+
+Examples of things to look for:
+- New config options that would replace a workaround currently in use
+- Deprecated flags or APIs that this repo still uses (should be migrated)
+- New built-in functionality that makes a custom script/workaround redundant
+- Performance or security settings now available that are not yet enabled
+- New native integration that replaces a manual process>
+
 ### Pre-merge checks
 
 <GitHub task-list syntax. Specific to this update. If none needed: `- [ ] No special pre-merge checks beyond normal CI.`>
