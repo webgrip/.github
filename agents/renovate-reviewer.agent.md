@@ -125,7 +125,18 @@ A scheduled relay workflow polls all `copilot/**` branches for this file every 5
 
 ### Important upstream changes
 
-<Bullets only for relevant changes. Tag each: `[breaking]`, `[security]`, `[behavior]`, `[migration]`, `[feature]`, `[bugfix]`, or `[unknown]`. For every bullet, include a direct link to the upstream PR, commit, issue, or release note that introduced it — e.g. `([owner/repo#123](https://github.com/…))`. This lets the maintainer read the full discussion. If no release notes were found, say so explicitly and explain where you looked.>
+Replace the placeholder rows below with a table of all notable changes between old and new version. Include every `[breaking]`, `[security]`, `[behavior]`, and `[migration]` entry; include `[feature]` and `[bugfix]` when relevant to how this repo uses the dependency.
+
+| Type | Description | Link | Repo affected? |
+|------|-------------|------|----------------|
+| `[breaking]`/`[security]`/`[behavior]`/`[migration]`/`[feature]`/`[bugfix]`/`[unknown]` | What changed | [source](<url>) | **Yes** — why / **No** — why not / **Unknown** — what is missing |
+
+Rules for **Repo affected?**:
+- **Yes** — this repo uses the changed code path, config key, flag, API, or file. Explain concisely.
+- **No** — this repo does not use the affected feature/API/path. State why (e.g. "feature not enabled", "different code path used", "not deployed here").
+- **Unknown** — you could not determine exposure; explain what data is missing.
+
+If no release notes were found, say so explicitly and explain where you looked.
 
 ### Local impact
 
