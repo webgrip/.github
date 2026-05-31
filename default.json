@@ -1,0 +1,139 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "WebGrip default Renovate preset. Conservative by design: no automerge, all non-security updates require Dependency Dashboard approval, versions are delayed for stability, and Docker/GitHub Actions digests are pinned.",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":separateMultipleMajorReleases",
+    ":enableVulnerabilityAlerts",
+    ":timezone(Europe/Amsterdam)"
+  ],
+  "enabled": true,
+  "configMigration": true,
+  "dependencyDashboard": true,
+  "dependencyDashboardTitle": "Renovate Dependency Dashboard",
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "timezone": "Europe/Amsterdam",
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "updateNotScheduled": false,
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "prCreation": "not-pending",
+  "prHourlyLimit": 1,
+  "prConcurrentLimit": 3,
+  "branchConcurrentLimit": 3,
+  "automerge": false,
+  "platformAutomerge": false,
+  "ignoreTests": false,
+  "rebaseWhen": "behind-base-branch",
+  "recreateWhen": "never",
+  "rangeStrategy": "pin",
+  "pinDigests": true,
+  "separateMajorMinor": true,
+  "separateMinorPatch": true,
+  "separateMultipleMajor": true,
+  "ignoreUnstable": true,
+  "respectLatest": true,
+  "abandonmentThreshold": "1 year",
+  "assigneesFromCodeOwners": true,
+  "reviewersFromCodeOwners": true,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "extends": [
+      "schedule:monthly"
+    ],
+    "dependencyDashboardApproval": true
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": [
+      "security",
+      "dependencies",
+      "renovate"
+    ],
+    "prCreation": "immediate",
+    "schedule": [
+      "at any time"
+    ],
+    "dependencyDashboardApproval": false
+  },
+  "packageRules": [
+    {
+      "description": "Require explicit approval before opening any normal dependency update PR.",
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "digest",
+        "replacement",
+        "rollback"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Never automerge major or replacement updates.",
+      "matchUpdateTypes": [
+        "major",
+        "replacement"
+      ],
+      "automerge": false,
+      "addLabels": [
+        "breaking-change"
+      ]
+    },
+    {
+      "description": "Pin Docker image digests and require approval for digest refreshes.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "pinDigests": true,
+      "dependencyDashboardApproval": true,
+      "addLabels": [
+        "container"
+      ]
+    },
+    {
+      "description": "Pin GitHub Actions to immutable digests and require approval for digest refreshes.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "pinDigests": true,
+      "dependencyDashboardApproval": true,
+      "addLabels": [
+        "github-actions"
+      ]
+    },
+    {
+      "description": "Keep peer dependency ranges stable unless a repository opts out.",
+      "matchDepTypes": [
+        "peerDependencies"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Do not block security fixes behind the normal approval gate.",
+      "matchJsonata": [
+        "isVulnerabilityAlert = true",
+        "$exists(vulnerabilityFixVersion)"
+      ],
+      "dependencyDashboardApproval": false,
+      "prCreation": "immediate",
+      "schedule": [
+        "at any time"
+      ],
+      "addLabels": [
+        "security"
+      ]
+    }
+  ]
+}
